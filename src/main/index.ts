@@ -757,16 +757,24 @@ function toggleWindow(source = 'unknown'): void {
   }
 
   if (mainWindow.isVisible()) {
+    // Pair pill ↔ host: capture host's current visibility so we can
+    // restore it on next summon (Claude-anywhere on-demand: open, peek,
+    // dismiss as a unit).
+    const hostWasVisible = !!(hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible())
+    saveHostState({ bounds: loadHostState().bounds, visibleOnLastHide: hostWasVisible })
+
     mainWindow.hide()
-    // Pair pill ↔ host: hiding the pill via the global summon also tucks
-    // the host away. Without this the host would orphan above empty desktop
-    // space when the user dismisses the overlay.
-    if (hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible()) {
-      hostWindow.hide()
+    if (hostWasVisible) {
+      hostWindow!.hide()
     }
     if (SPACES_DEBUG) scheduleToggleSnapshots(toggleId, 'hide')
   } else {
     showWindow(source)
+    // Restore host to its pre-dismissal state. Tied to pill summon so the
+    // user doesn't have to remember a separate hotkey for the host.
+    if (loadHostState().visibleOnLastHide) {
+      showHostWindow()
+    }
   }
 }
 
@@ -958,32 +966,58 @@ interface HostBounds {
   height: number
 }
 
-function hostBoundsPath(): string {
+interface HostState {
+  bounds: HostBounds | null
+  /** Was the host visible the last time the pill was hidden? Used to
+   *  restore host visibility on next pill summon. */
+  visibleOnLastHide: boolean
+}
+
+function hostStatePath(): string {
   return join(app.getPath('userData'), HOST_BOUNDS_FILE)
 }
 
-function loadHostBounds(): HostBounds | null {
+function loadHostState(): HostState {
   try {
-    const raw = require('fs').readFileSync(hostBoundsPath(), 'utf-8')
+    const raw = require('fs').readFileSync(hostStatePath(), 'utf-8')
     const parsed = JSON.parse(raw)
-    if (
+    const bounds: HostBounds | null =
       typeof parsed?.x === 'number' &&
       typeof parsed?.y === 'number' &&
       typeof parsed?.width === 'number' &&
       typeof parsed?.height === 'number'
-    ) {
-      return parsed as HostBounds
+        ? { x: parsed.x, y: parsed.y, width: parsed.width, height: parsed.height }
+        : parsed?.bounds && typeof parsed.bounds.x === 'number'
+          ? parsed.bounds as HostBounds
+          : null
+    return {
+      bounds,
+      visibleOnLastHide: typeof parsed?.visibleOnLastHide === 'boolean' ? parsed.visibleOnLastHide : false,
     }
   } catch {}
-  return null
+  return { bounds: null, visibleOnLastHide: false }
+}
+
+function saveHostState(state: HostState): void {
+  try {
+    // Flat shape for backwards compat with the v1 layout (just x/y/w/h
+    // at the top level), with the new visibleOnLastHide alongside.
+    const payload = state.bounds
+      ? { ...state.bounds, visibleOnLastHide: state.visibleOnLastHide }
+      : { visibleOnLastHide: state.visibleOnLastHide }
+    require('fs').writeFileSync(hostStatePath(), JSON.stringify(payload))
+  } catch (err) {
+    log(`[host] saveHostState failed: ${(err as Error).message}`)
+  }
+}
+
+function loadHostBounds(): HostBounds | null {
+  return loadHostState().bounds
 }
 
 function saveHostBounds(b: HostBounds): void {
-  try {
-    require('fs').writeFileSync(hostBoundsPath(), JSON.stringify(b))
-  } catch (err) {
-    log(`[host] saveHostBounds failed: ${(err as Error).message}`)
-  }
+  const current = loadHostState()
+  saveHostState({ bounds: b, visibleOnLastHide: current.visibleOnLastHide })
 }
 
 /** Compute a default placement: centered above the pill on the pill's display. */
@@ -1176,6 +1210,9 @@ function toggleHostWindow(): void {
 ipcMain.on(IPC.SHOW_HOST_WINDOW, () => showHostWindow())
 ipcMain.on(IPC.HIDE_HOST_WINDOW, () => hideHostWindow())
 ipcMain.on(IPC.TOGGLE_HOST_WINDOW, () => toggleHostWindow())
+ipcMain.handle(IPC.GET_HOST_VISIBILITY, () => {
+  return !!(hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible())
+})
 
 // ─── IPC Handlers (typed, strict) ───
 

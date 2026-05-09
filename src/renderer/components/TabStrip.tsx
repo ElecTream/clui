@@ -1,11 +1,43 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Minus, ArrowsClockwise } from '@phosphor-icons/react'
+import { Plus, X, Minus, ArrowsClockwise, Stack } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { HistoryPicker } from './HistoryPicker'
 import { SettingsPopover } from './SettingsPopover'
 import { useColors, useThemeStore } from '../theme'
 import type { TabStatus } from '../../shared/types'
+
+/**
+ * Deck button — toggles the host window. Single source of truth for the
+ * host's open/closed state lives in main process; this button just sends
+ * an IPC and listens for the broadcast back. data-active drives the
+ * accent-color styling when host is open.
+ */
+function DeckButton() {
+  const colors = useColors()
+  const [hostVisible, setHostVisible] = useState(false)
+
+  useEffect(() => {
+    // Seed from current state — covers the case where the host was
+    // restored on pill summon before the renderer mounted.
+    window.clui.getHostVisibility().then(setHostVisible).catch(() => {})
+    const off = window.clui.onHostWindowVisibility((v) => setHostVisible(v))
+    return off
+  }, [])
+
+  return (
+    <button
+      data-clui-no-drag="true"
+      onClick={() => window.clui.toggleHostWindow()}
+      className="clui-icon-btn"
+      data-active={hostVisible ? 'true' : 'false'}
+      style={{ color: hostVisible ? colors.accent : undefined }}
+      title={hostVisible ? 'Close hub' : 'Open hub'}
+    >
+      <Stack size={16} />
+    </button>
+  )
+}
 
 function StatusDot({ status, hasUnread, hasPermission }: { status: TabStatus; hasUnread: boolean; hasPermission: boolean }) {
   const colors = useColors()
@@ -168,6 +200,8 @@ export function TabStrip() {
         </button>
 
         <HistoryPicker />
+
+        <DeckButton />
 
         <SettingsPopover />
 

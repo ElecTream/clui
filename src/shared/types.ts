@@ -553,6 +553,7 @@ export const IPC = {
   SHOW_HOST_WINDOW: 'clui:show-host-window',
   HIDE_HOST_WINDOW: 'clui:hide-host-window',
   HOST_WINDOW_VISIBILITY: 'clui:host-window-visibility',
+  GET_HOST_VISIBILITY: 'clui:get-host-visibility',
 
   // Auto-update
   CHECK_FOR_UPDATE: 'clui:check-for-update',

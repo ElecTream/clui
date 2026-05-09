@@ -98,6 +98,16 @@ export interface CluiAPI {
   /** Update which snap zone is highlighted in the grid */
   updateSnapZone(zone: 'left' | 'center' | 'right'): void
 
+  /** Phase 0.1 — toggle / show / hide the host window from the renderer. */
+  toggleHostWindow(): void
+  showHostWindow(): void
+  hideHostWindow(): void
+  /** One-shot read of current host visibility. Use on mount to seed UI
+   *  state before the first onHostWindowVisibility broadcast. */
+  getHostVisibility(): Promise<boolean>
+  /** Subscribe to host visibility changes (broadcast on show/hide). */
+  onHostWindowVisibility(callback: (visible: boolean) => void): () => void
+
   // ─── Event listeners (main → renderer) ───
   onEvent(callback: (tabId: string, event: NormalizedEvent) => void): () => void
   onTabStatusChange(callback: (tabId: string, newStatus: string, oldStatus: string) => void): () => void
@@ -202,6 +212,15 @@ const api: CluiAPI = {
   hideSnapGrid: () => ipcRenderer.send(IPC.HIDE_SNAP_GRID),
   updateSnapZone: (zone) => ipcRenderer.send(IPC.UPDATE_SNAP_ZONE, zone),
   setWindowWidth: (width) => ipcRenderer.send(IPC.SET_WINDOW_WIDTH, width),
+  toggleHostWindow: () => ipcRenderer.send(IPC.TOGGLE_HOST_WINDOW),
+  showHostWindow: () => ipcRenderer.send(IPC.SHOW_HOST_WINDOW),
+  hideHostWindow: () => ipcRenderer.send(IPC.HIDE_HOST_WINDOW),
+  getHostVisibility: () => ipcRenderer.invoke(IPC.GET_HOST_VISIBILITY),
+  onHostWindowVisibility: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, visible: boolean) => callback(visible)
+    ipcRenderer.on(IPC.HOST_WINDOW_VISIBILITY, handler)
+    return () => ipcRenderer.removeListener(IPC.HOST_WINDOW_VISIBILITY, handler)
+  },
 
   // ─── Event listeners ───
   onEvent: (callback) => {
