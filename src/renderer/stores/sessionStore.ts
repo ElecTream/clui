@@ -1635,8 +1635,33 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
       isCompacting: false,
       compactionMessageId: null,
       hasUnread: false,
+      // These three are transient too — but were missed when partialize was
+      // first written. Without them, rehydrated tabs are missing the fields and
+      // any access (e.g. `tab.permissionQueue.length` in TabStrip) throws,
+      // blanking the React tree on a transparent click-through window so the
+      // overlay appears completely invisible.
+      permissionQueue: [] as import('../../shared/types').PermissionRequest[],
+      permissionDenied: null,
+      attachments: [],
     })),
   }),
   // Bump version when the persisted shape changes incompatibly so old data is dropped.
-  version: 1,
+  version: 2,
+  migrate: (persisted: unknown, fromVersion: number) => {
+    // v1 → v2: backfill the three transient fields that partialize previously
+    // omitted (permissionQueue, permissionDenied, attachments). Without this,
+    // tabs rehydrated from a v1 cache still crash on first render.
+    if (fromVersion < 2 && persisted && typeof persisted === 'object') {
+      const state = persisted as { tabs?: Array<Record<string, unknown>> }
+      if (Array.isArray(state.tabs)) {
+        state.tabs = state.tabs.map((t) => ({
+          permissionQueue: [],
+          permissionDenied: null,
+          attachments: [],
+          ...t,
+        }))
+      }
+    }
+    return persisted as State
+  },
 }))
