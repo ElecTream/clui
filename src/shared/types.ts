@@ -545,6 +545,15 @@ export const IPC = {
   WRITE_PROJECT_CLAUDEMD: 'clui:write-project-claudemd',
   CLAUDE_SETTINGS_CHANGED: 'clui:claude-settings-changed',
 
+  // Phase 0.1 — tethered host window (separate solid BrowserWindow that
+  // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
+  // transparent canvas to eliminate shadow-bleed and give the user a real
+  // resizable surface). Pill stays as the always-on-top summon.
+  TOGGLE_HOST_WINDOW: 'clui:toggle-host-window',
+  SHOW_HOST_WINDOW: 'clui:show-host-window',
+  HIDE_HOST_WINDOW: 'clui:hide-host-window',
+  HOST_WINDOW_VISIBILITY: 'clui:host-window-visibility',
+
   // Auto-update
   CHECK_FOR_UPDATE: 'clui:check-for-update',
   INSTALL_UPDATE: 'clui:install-update',

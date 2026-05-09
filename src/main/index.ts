@@ -24,6 +24,12 @@ function log(msg: string): void {
 
 let mainWindow: BrowserWindow | null = null
 let gridWindow: BrowserWindow | null = null
+// Phase 0.1 — host window. Holds Conversation/Settings/Marketplace/etc. as a
+// real solid rectangular surface so its shadow + edges don't alpha-bleed
+// across the pill's transparent canvas. Stays paired with the pill (same
+// always-on-top + skip-taskbar + cross-space membership) so the overlay
+// metaphor is preserved.
+let hostWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let screenshotCounter = 0
 let toggleSequence = 0
@@ -151,8 +157,15 @@ const PILL_BOTTOM_MARGIN = OVERLAY_PILL_BOTTOM_MARGIN
 // ─── Broadcast to renderer ───
 
 function broadcast(channel: string, ...args: unknown[]): void {
+  // Phase 0.1 — fan out to every clui-owned BrowserWindow we know about.
+  // Both pill and host renderers subscribe to the same store-sync channels
+  // so events from one (e.g. WINDOW_SHOWN, ACTIVATE_TAB_BY_INDEX) reach the
+  // other.
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, ...args)
+  }
+  if (hostWindow && !hostWindow.isDestroyed()) {
+    hostWindow.webContents.send(channel, ...args)
   }
 }
 
@@ -589,6 +602,20 @@ function createWindow(): void {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   mainWindow.setAlwaysOnTop(true, 'screen-saver')
 
+  // The window is transparent + click-through, so a renderer crash before
+  // first paint leaves nothing visible — the overlay would simply seem to
+  // never open. Surface the cause to ~/.clui-debug.log instead of silently
+  // hanging on ready-to-show.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    log(`[renderer] render-process-gone reason=${details.reason} exitCode=${details.exitCode}`)
+  })
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    log(`[renderer] did-fail-load code=${code} desc="${desc}" url=${url}`)
+  })
+  mainWindow.webContents.on('preload-error', (_e, preloadPath, err) => {
+    log(`[renderer] preload-error path=${preloadPath} err=${err.message}`)
+  })
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
     // Enable OS-level click-through for transparent regions.
@@ -721,6 +748,12 @@ function toggleWindow(source = 'unknown'): void {
 
   if (mainWindow.isVisible()) {
     mainWindow.hide()
+    // Pair pill ↔ host: hiding the pill via the global summon also tucks
+    // the host away. Without this the host would orphan above empty desktop
+    // space when the user dismisses the overlay.
+    if (hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible()) {
+      hostWindow.hide()
+    }
     if (SPACES_DEBUG) scheduleToggleSnapshots(toggleId, 'hide')
   } else {
     showWindow(source)
@@ -875,6 +908,215 @@ ipcMain.on(IPC.UPDATE_SNAP_ZONE, (_, zone: 'left' | 'center' | 'right') => {
       .catch(() => {})
   }
 })
+
+// ─── Host window (Phase 0.1) ───
+//
+// The host is a separate solid BrowserWindow that holds the conversation,
+// settings, marketplace, and search surfaces. The pill stays as the small
+// always-on-top transparent summon; non-pill content lives here so its
+// box-shadow + rounded corners + scrims paint into a real rectangular
+// surface instead of bleeding through the pill's alpha-blended canvas.
+//
+// First commit: window infrastructure only. Renders a placeholder while
+// the migration of in-pill content is staged.
+
+const HOST_BOUNDS_FILE = 'host-window-bounds.json'
+const HOST_DEFAULT_WIDTH = 960
+const HOST_DEFAULT_HEIGHT = 700
+const HOST_MIN_WIDTH = 480
+const HOST_MIN_HEIGHT = 320
+// Vertical gap between the bottom of the host and the top of the pill.
+// The pill sits flush at the bottom of the work area; the host floats
+// above it.
+const HOST_PILL_GAP = 12
+
+interface HostBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+function hostBoundsPath(): string {
+  return join(app.getPath('userData'), HOST_BOUNDS_FILE)
+}
+
+function loadHostBounds(): HostBounds | null {
+  try {
+    const raw = require('fs').readFileSync(hostBoundsPath(), 'utf-8')
+    const parsed = JSON.parse(raw)
+    if (
+      typeof parsed?.x === 'number' &&
+      typeof parsed?.y === 'number' &&
+      typeof parsed?.width === 'number' &&
+      typeof parsed?.height === 'number'
+    ) {
+      return parsed as HostBounds
+    }
+  } catch {}
+  return null
+}
+
+function saveHostBounds(b: HostBounds): void {
+  try {
+    require('fs').writeFileSync(hostBoundsPath(), JSON.stringify(b))
+  } catch (err) {
+    log(`[host] saveHostBounds failed: ${(err as Error).message}`)
+  }
+}
+
+/** Compute a default placement: centered above the pill on the pill's display. */
+function computeDefaultHostBounds(): HostBounds {
+  const display = getOverlayDisplay()
+  const wa = display.workArea
+  const width = HOST_DEFAULT_WIDTH
+  const height = HOST_DEFAULT_HEIGHT
+  // Center horizontally on the pill's display, sit above the pill+gap.
+  const x = wa.x + Math.round((wa.width - width) / 2)
+  const pillTop = wa.y + wa.height - PILL_HEIGHT - PILL_BOTTOM_MARGIN
+  const y = Math.max(wa.y, pillTop - height - HOST_PILL_GAP)
+  return { x, y, width, height }
+}
+
+function clampHostBoundsToDisplay(b: HostBounds): HostBounds {
+  const displays = screen.getAllDisplays()
+  const cx = b.x + b.width / 2
+  const cy = b.y + b.height / 2
+  let best = displays[0]
+  let bestDist = Infinity
+  for (const d of displays) {
+    const dcx = d.workArea.x + d.workArea.width / 2
+    const dcy = d.workArea.y + d.workArea.height / 2
+    const dist = Math.abs(cx - dcx) + Math.abs(cy - dcy)
+    if (dist < bestDist) { bestDist = dist; best = d }
+  }
+  const wa = best.workArea
+  const width = Math.min(b.width, wa.width)
+  const height = Math.min(b.height, wa.height)
+  return {
+    x: Math.max(wa.x, Math.min(b.x, wa.x + wa.width - width)),
+    y: Math.max(wa.y, Math.min(b.y, wa.y + wa.height - height)),
+    width,
+    height,
+  }
+}
+
+function createHostWindow(): BrowserWindow {
+  if (hostWindow && !hostWindow.isDestroyed()) return hostWindow
+
+  const initial = clampHostBoundsToDisplay(loadHostBounds() || computeDefaultHostBounds())
+
+  hostWindow = new BrowserWindow({
+    x: initial.x,
+    y: initial.y,
+    width: initial.width,
+    height: initial.height,
+    minWidth: HOST_MIN_WIDTH,
+    minHeight: HOST_MIN_HEIGHT,
+    // Solid rectangular surface — the whole point of this window. No
+    // transparency means box-shadow and antialiased corners stay inside
+    // the OS-clipped window region instead of leaking onto the desktop.
+    transparent: false,
+    frame: false,
+    resizable: true,
+    movable: true,
+    // Pair with pill: float above other apps + ride along all virtual
+    // desktops + don't appear in the taskbar. Preserves the "this is part
+    // of the overlay" feel.
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    // Real DWM shadow — safe now that the window is rectangular.
+    hasShadow: true,
+    show: false,
+    paintWhenInitiallyHidden: false,
+    backgroundColor: '#0f0f0f',
+    icon: join(
+      __dirname,
+      '../../resources',
+      process.platform === 'darwin' ? 'icon.icns' : process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+    ),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  hostWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  hostWindow.setAlwaysOnTop(true, 'screen-saver')
+
+  hostWindow.once('ready-to-show', () => {
+    log('[host] ready-to-show')
+    if (process.env.ELECTRON_RENDERER_URL && process.env.CLUI_DEVTOOLS === '1') {
+      hostWindow?.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  // Persist bounds whenever the user moves or resizes. Debounce by
+  // listening to the move/resize end transitions (Electron fires these
+  // continuously while dragging).
+  let saveTimer: NodeJS.Timeout | null = null
+  const persistBounds = () => {
+    if (!hostWindow || hostWindow.isDestroyed()) return
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (!hostWindow || hostWindow.isDestroyed()) return
+      const b = hostWindow.getBounds()
+      saveHostBounds({ x: b.x, y: b.y, width: b.width, height: b.height })
+    }, 200)
+  }
+  hostWindow.on('moved', persistBounds)
+  hostWindow.on('resized', persistBounds)
+
+  hostWindow.on('close', (e) => {
+    // Match pill behavior: "close" hides; only forceQuit truly destroys.
+    if (!forceQuit) {
+      e.preventDefault()
+      hostWindow?.hide()
+      broadcast(IPC.HOST_WINDOW_VISIBILITY, false)
+    }
+  })
+
+  hostWindow.on('show', () => broadcast(IPC.HOST_WINDOW_VISIBILITY, true))
+  hostWindow.on('hide', () => broadcast(IPC.HOST_WINDOW_VISIBILITY, false))
+
+  // Load the same renderer entry as the pill, but tag the URL so the
+  // renderer can branch on which window it's rendering. Single React
+  // bundle, two top-level UIs.
+  const hostQuery = '?window=host'
+  if (process.env.ELECTRON_RENDERER_URL) {
+    hostWindow.loadURL(process.env.ELECTRON_RENDERER_URL + hostQuery)
+  } else {
+    hostWindow.loadFile(join(__dirname, '../renderer/index.html'), { search: hostQuery.slice(1) })
+  }
+
+  return hostWindow
+}
+
+function showHostWindow(): void {
+  const win = createHostWindow()
+  // Always re-assert space membership before show; lost on hide/show cycles.
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.show()
+}
+
+function hideHostWindow(): void {
+  if (hostWindow && !hostWindow.isDestroyed()) {
+    hostWindow.hide()
+  }
+}
+
+function toggleHostWindow(): void {
+  if (hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible()) {
+    hideHostWindow()
+  } else {
+    showHostWindow()
+  }
+}
+
+ipcMain.on(IPC.SHOW_HOST_WINDOW, () => showHostWindow())
+ipcMain.on(IPC.HIDE_HOST_WINDOW, () => hideHostWindow())
+ipcMain.on(IPC.TOGGLE_HOST_WINDOW, () => toggleHostWindow())
 
 // ─── IPC Handlers (typed, strict) ───
 
@@ -2580,6 +2822,12 @@ app.whenReady().then(async () => {
   }
   globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
 
+  // Phase 0.1 — toggle the host window. Temporary keybind during the
+  // multi-window migration; the host will eventually open whenever the
+  // user expands the pill (Ctrl+/) and this debug shortcut goes away.
+  const hostShortcut = process.platform === 'darwin' ? 'Alt+Shift+Space' : 'Control+Alt+H'
+  globalShortcut.register(hostShortcut, () => toggleHostWindow())
+
   // Per-tab summon shortcuts: Ctrl+Alt+1 .. Ctrl+Alt+9 (Cmd+Alt+1..9 on macOS).
   // Brings the pill forward AND switches to tab N (1-indexed). If tab N doesn't
   // exist, the renderer ignores the index. This lets you keep multiple agents in
@@ -2606,8 +2854,14 @@ app.whenReady().then(async () => {
 
   function rebuildTrayMenu(): void {
     if (!tray) return
+    const hostShortcutLabel = process.platform === 'darwin' ? 'Alt+Shift+Space' : 'Ctrl+Alt+H'
+    const hostVisible = !!(hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible())
     const items: Electron.MenuItemConstructorOptions[] = [
       { label: 'Show Clui', click: () => showWindow('tray menu') },
+      {
+        label: hostVisible ? `Hide host window (${hostShortcutLabel})` : `Show host window (${hostShortcutLabel})`,
+        click: () => toggleHostWindow(),
+      },
     ]
     if (pendingUpdateVersion) {
       items.push({

@@ -10,11 +10,25 @@
 html, body, #root {
   height: 100%;
   margin: 0;
-  background: transparent !important;
   overflow: hidden;
   user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Phase 0.1 — pill window stays transparent (the canvas behind interactive
+ * elements has to pass-through to the desktop). The new host window is a
+ * solid rectangular surface and must paint its own background. main.tsx
+ * sets data-clui-window on <html>; CSS branches off it. */
+html[data-clui-window='pill'],
+html[data-clui-window='pill'] body,
+html[data-clui-window='pill'] #root {
+  background: transparent !important;
+}
+html[data-clui-window='host'],
+html[data-clui-window='host'] body,
+html[data-clui-window='host'] #root {
+  background: var(--clui-container-bg, #0f0f0f);
 }
 
 /* ─── Synthetic caret for @mention mirror overlay ─── */
