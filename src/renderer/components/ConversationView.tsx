@@ -129,16 +129,26 @@ export function ConversationView() {
     }
   }, [scrollTrigger])
 
-  // Group only the visible slice of messages
+  // Group only the visible slice of messages.
+  //
+  // Phase 0.6 perf — depend on (allMessages, startIndex) instead of the sliced
+  // array itself, because `slice()` creates a new array reference on every
+  // render and would defeat the memo. Slicing inside the factory keeps the
+  // dep set stable: when allMessages identity is unchanged AND startIndex is
+  // unchanged, groupMessages doesn't run.
   const allMessages = tab?.messages ?? []
   const totalCount = allMessages.length
   const startIndex = Math.max(0, totalCount - INITIAL_RENDER_CAP - renderOffset * PAGE_SIZE)
-  const visibleMessages = startIndex > 0 ? allMessages.slice(startIndex) : allMessages
   const hasOlder = startIndex > 0
 
   const grouped = useMemo(
-    () => groupMessages(visibleMessages),
-    [visibleMessages],
+    () => groupMessages(startIndex > 0 ? allMessages.slice(startIndex) : allMessages),
+    [allMessages, startIndex],
+  )
+
+  const visibleMessages = useMemo(
+    () => (startIndex > 0 ? allMessages.slice(startIndex) : allMessages),
+    [allMessages, startIndex],
   )
 
   const hiddenCount = totalCount - visibleMessages.length
@@ -603,8 +613,14 @@ function processFileChips(children: React.ReactNode, colors: ReturnType<typeof u
 }
 
 // ─── User Message ───
+//
+// Phase 0.6 perf: wrapped with React.memo + custom equality. UserMessage is
+// stable as long as the message id/content/attachments don't change — without
+// memoization, every keystroke during streaming causes ALL prior user
+// messages to re-render (markdown re-parse, attachment re-resolve, etc.).
 
-function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
+const UserMessage = React.memo(
+  function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
   const colors = useColors()
 
   // Resolve attachments: prefer the rich `attachments` field (has dataUrl thumbnails),
@@ -672,7 +688,13 @@ function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: b
       {content}
     </motion.div>
   )
-}
+  },
+  (prev, next) =>
+    prev.skipMotion === next.skipMotion &&
+    prev.message.id === next.message.id &&
+    prev.message.content === next.message.content &&
+    prev.message.attachments === next.message.attachments,
+)
 
 // ─── Queued Message (waiting at bottom until processed) ───
 
@@ -1238,7 +1260,11 @@ const LOCAL_COMMAND_PREFIX = '__LOCAL_COMMAND_DATA__'
 const MEMORY_PREFIX = '__MEMORY_DATA__'
 const COMPACT_CONFIRM_PREFIX = '__COMPACT_CONFIRM__'
 
-function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
+// Phase 0.6 perf — memoized. System messages parse JSON sentinels (context,
+// todo, cost, memory, compact) on every render; without memo this happens
+// for every prior system card during a streaming response.
+const SystemMessage = React.memo(
+  function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
   const colors = useColors()
 
   // Local command replay card
@@ -1420,7 +1446,12 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
       {inner}
     </motion.div>
   )
-}
+  },
+  (prev, next) =>
+    prev.skipMotion === next.skipMotion &&
+    prev.message.id === next.message.id &&
+    prev.message.content === next.message.content,
+)
 
 // ─── Todo Card ───
 
