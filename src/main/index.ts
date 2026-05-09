@@ -235,11 +235,14 @@ function readBundleInfo(appPath: string): Promise<PlistObject | null> {
   if (!existsSync(plistPath)) return Promise.resolve(null)
 
   return new Promise((resolve) => {
+    // execFile typings split: stdio belongs to ExecFileOptions (no encoding),
+    // 'utf8' belongs to ExecFileOptionsWithStringEncoding (no stdio). Drop
+    // stdio (default is fine for our purpose: stdout pipe, stdin/stderr ignore
+    // via maxBuffer + .stderr access).
     execFile('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plistPath], {
       encoding: 'utf8',
       maxBuffer: 2 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }, (err, stdout) => {
+    }, (err: Error | null, stdout: string | Buffer) => {
       if (err) {
         resolve(null)
         return
@@ -1871,7 +1874,9 @@ ipcMain.handle(IPC.SELECT_DIRECTORY, async () => {
   // Unparented avoids modal dimming on the transparent overlay.
   // Activation is fine here — user is actively interacting with Clui.
   if (process.platform === 'darwin') app.focus()
-  const options = { properties: ['openDirectory'] as const }
+  // Electron 42 tightened OpenDialogOptions.properties to a literal-union
+  // mutable array. `as const` makes it readonly which the tight type rejects.
+  const options: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
   const result = process.platform === 'darwin'
     ? await dialog.showOpenDialog(options)
     : await dialog.showOpenDialog(mainWindow, options)
@@ -1893,7 +1898,7 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
   if (!mainWindow) return null
   // macOS: activate app so unparented dialog appears on top
   if (process.platform === 'darwin') app.focus()
-  const options = {
+  const options: Electron.OpenDialogOptions = {
     properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'All Files', extensions: ['*'] },

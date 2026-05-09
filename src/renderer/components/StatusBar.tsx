@@ -13,10 +13,10 @@ function ModelPicker() {
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
   const availableModels = useSessionStore((s) => s.availableModels)
-  const tab = useSessionStore(
-    (s) => s.tabs.find((t) => t.id === s.activeTabId),
-    (a, b) => a === b || (!!a && !!b && a.status === b.status && a.sessionModel === b.sessionModel),
-  )
+  // Zustand v5 dropped the 2nd equality-fn arg; rely on default Object.is
+  // reference equality. Tab object identity already changes only when the
+  // array is mutated, which happens exactly when something changes.
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   const popoverLayer = usePopoverLayer()
   const colors = useColors()
   const defaultModel = availableModels.find((m) => m.isDefault) ?? availableModels[0]
@@ -493,16 +493,7 @@ function compactPath(fullPath: string): string {
 }
 
 export function StatusBar() {
-  const tab = useSessionStore(
-    (s) => s.tabs.find((t) => t.id === s.activeTabId),
-    (a, b) => a === b || (!!a && !!b
-      && a.status === b.status
-      && a.additionalDirs === b.additionalDirs
-      && a.hasChosenDirectory === b.hasChosenDirectory
-      && a.workingDirectory === b.workingDirectory
-      && a.claudeSessionId === b.claudeSessionId
-    ),
-  )
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   const addDirectory = useSessionStore((s) => s.addDirectory)
   const removeDirectory = useSessionStore((s) => s.removeDirectory)
   const popoverLayer = usePopoverLayer()

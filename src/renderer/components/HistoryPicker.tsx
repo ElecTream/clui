@@ -19,10 +19,8 @@ type HistoryScope = 'project' | 'all'
 export function HistoryPicker() {
   const resumeSession = useSessionStore((s) => s.resumeSession)
   const isExpanded = useSessionStore((s) => s.isExpanded)
-  const activeTab = useSessionStore(
-    (s) => s.tabs.find((t) => t.id === s.activeTabId),
-    (a, b) => a === b || (!!a && !!b && a.hasChosenDirectory === b.hasChosenDirectory && a.workingDirectory === b.workingDirectory),
-  )
+  // Zustand v5 dropped equality-fn arg. Default Object.is is fine here.
+  const activeTab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const popoverLayer = usePopoverLayer()
   const colors = useColors()

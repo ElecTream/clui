@@ -192,7 +192,10 @@ async function ensurePipeline(): Promise<void> {
   const fileProgress: Record<string, { loaded: number; total: number }> = {}
   let lastReported = -1
   pipeline = await createPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-    quantized: true,
+    // transformers.js 4.2 removed the `quantized` flag at the top level;
+    // quantization is now controlled by `dtype: 'q8'` etc. We pin to the
+    // q8 default which matches the previous quantized:true behavior.
+    dtype: 'q8',
     progress_callback: (info: any) => {
       if (info.status === 'progress' && info.file) {
         fileProgress[info.file] = { loaded: info.loaded ?? 0, total: info.total ?? 0 }

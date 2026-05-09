@@ -32,7 +32,10 @@ function DotGridLoader({ progress, accent }: { progress: number; accent: string 
   const wrapRef = useRef<HTMLDivElement>(null)
   const targetRef = useRef(progress)
   const smoothRef = useRef(0)
-  const rafRef = useRef<ReturnType<typeof requestAnimationFrame>>()
+  // React 19 / @types/react ^19 require an explicit initial arg for useRef.
+  // Using `| undefined` so the existing assign-to-undefined patterns below
+  // remain valid.
+  const rafRef = useRef<ReturnType<typeof requestAnimationFrame> | undefined>(undefined)
   const kickRef = useRef<(() => void) | null>(null)
 
   // Keep target in sync and restart the rAF loop if it stopped
@@ -143,7 +146,7 @@ export function SearchPanel() {
   const [hasSearched, setHasSearched] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const isMountedRef = useRef(true)
   const searchRequestIdRef = useRef(0)
 
@@ -474,7 +477,7 @@ function ResultCard({ result, colors, index, onClick }: {
 }) {
   const [hovered, setHovered] = useState(false)
   const [tooltipVisible, setTooltipVisible] = useState(false)
-  const tooltipTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const scorePercent = Math.round(result.score * 100)
 
   // Derive a pill color from score
