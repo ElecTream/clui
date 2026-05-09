@@ -196,12 +196,16 @@ export function PermissionModePicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        data-clui-no-drag="true"
-        className="stack-btn glass-surface"
-        style={{ color: isAuto ? colors.accent : undefined }}
-        title={`Permission mode: ${isAuto ? 'Auto' : 'Ask'} — click to switch`}
+        className="flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 transition-colors whitespace-nowrap flex-shrink-0"
+        style={{
+          color: colors.textTertiary,
+          cursor: 'pointer',
+        }}
+        title="Permission mode (global)"
       >
-        <ShieldCheck size={17} weight={isAuto ? 'fill' : 'regular'} />
+        <ShieldCheck size={11} weight={isAuto ? 'fill' : 'regular'} />
+        {isAuto ? 'Auto' : 'Ask'}
+        <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
       </button>
 
       {popoverLayer && open && createPortal(
@@ -266,13 +270,18 @@ export function PermissionModePicker() {
   )
 }
 
-export function TerminalLaunchControl({
-  sessionId,
-  projectPath,
-}: {
-  sessionId: string | null
-  projectPath: string
-}) {
+/**
+ * Open-in-CLI circle. Click launches the active tab's session in the
+ * user's preferred terminal app; right-click opens the terminal picker.
+ *
+ * Pulls active-tab metadata from the store directly so callers don't
+ * have to thread sessionId/projectPath props — the picker now lives
+ * outside the per-tab strip (right-side circle next to the hub).
+ */
+export function TerminalLaunchControl() {
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  const sessionId = tab?.claudeSessionId ?? null
+  const projectPath = tab?.workingDirectory ?? '~'
   const preferredTerminalId = useThemeStore((s) => s.preferredTerminalId)
   const setPreferredTerminalId = useThemeStore((s) => s.setPreferredTerminalId)
   const popoverLayer = usePopoverLayer()
@@ -282,7 +291,7 @@ export function TerminalLaunchControl({
   const [terminals, setTerminals] = useState<TerminalInstallation[]>([])
   const [terminalsLoading, setTerminalsLoading] = useState(false)
   const popoverId = 'terminal-launch-control-popover'
-  const triggerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ bottom: 0, right: 0 })
 
@@ -358,38 +367,21 @@ export function TerminalLaunchControl({
 
   return (
     <>
-      <div
+      <button
         ref={triggerRef}
-        className="flex items-center rounded-full overflow-hidden"
-        style={{
-          border: `1px solid ${colors.surfaceSecondary}`,
-          background: colors.surfacePrimary,
+        onClick={() => launchTerminal(preferredTerminalId)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          handleMenuToggle()
         }}
+        data-clui-no-drag="true"
+        className="stack-btn glass-surface"
+        title={`${currentDescription} · right-click to pick terminal`}
+        aria-expanded={open}
+        aria-controls={popoverId}
       >
-        <button
-          onClick={() => launchTerminal(preferredTerminalId)}
-          className="flex items-center gap-1 px-2.5 py-0.5 text-[11px] transition-colors"
-          style={{ color: colors.textSecondary }}
-          title={currentDescription}
-        >
-          Open in CLI
-          <Terminal size={11} />
-        </button>
-
-        <div style={{ width: 1, alignSelf: 'stretch', background: colors.containerBorder }} />
-
-        <button
-          onClick={handleMenuToggle}
-          className="px-1.5 py-0.5 transition-colors"
-          style={{ color: colors.textTertiary }}
-          title="Choose terminal app"
-          aria-expanded={open}
-          aria-controls={popoverId}
-          aria-label="Choose terminal app"
-        >
-          <CaretDown size={10} style={{ opacity: 0.8 }} />
-        </button>
-      </div>
+        <Terminal size={17} />
+      </button>
 
       {popoverLayer && open && createPortal(
         <motion.div

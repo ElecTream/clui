@@ -1,19 +1,19 @@
 import React from 'react'
 import { ArrowsClockwise } from '@phosphor-icons/react'
-import { useSessionStore } from '../stores/sessionStore'
 import { ActiveTabChip } from './TabSwitcher'
-import { ModelPicker, TerminalLaunchControl } from './StatusBar'
+import { ModelPicker, PermissionModePicker } from './StatusBar'
 import { useColors, useThemeStore } from '../theme'
 
 /**
  * Pill toolbar — the always-visible row above the input pill.
  *
- * Per the user's spec: pill carries only the controls they reach for
- * during a chat. Everything else (history, marketplace, settings,
- * directory picker, "+ new chat") moves to the hub. Permission mode
- * lives as its own circle to the right of the hub circle.
+ * Per the user's spec: pill carries the controls they reach for during
+ * a chat. Everything else (history, marketplace, settings, directory
+ * picker, "+ new chat") moves to the hub. The "Open in CLI" launcher
+ * lives as a circle to the right of the hub circle (mirroring the
+ * left-side action stack).
  *
- *   [active-tab indicator] [model] [open-in-cli] [optional update]
+ *   [active-tab indicator] [model] [mode] [optional update]
  */
 
 function UpdateButton() {
@@ -39,7 +39,6 @@ function UpdateButton() {
 
 export function TabStrip() {
   const colors = useColors()
-  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
 
   return (
     <div
@@ -74,18 +73,14 @@ export function TabStrip() {
         }}
       >
         <ModelPicker />
+        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+        <PermissionModePicker />
       </div>
 
       <div
         className="flex items-center flex-shrink-0"
         style={{ gap: 'var(--clui-space-2)' }}
       >
-        {tab && (
-          <TerminalLaunchControl
-            sessionId={tab.claudeSessionId}
-            projectPath={tab.workingDirectory}
-          />
-        )}
         <UpdateButton />
       </div>
     </div>

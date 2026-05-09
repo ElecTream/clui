@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Paperclip, Camera, Stack } from '@phosphor-icons/react'
 import { TabStrip } from './components/TabStrip'
-import { PermissionModePicker } from './components/StatusBar'
+import { TerminalLaunchControl } from './components/StatusBar'
 import { InputBar, type InputBarHandle } from './components/InputBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { SearchPanel } from './components/SearchPanel'
@@ -338,12 +338,11 @@ export default function App() {
             </div>
 
             {/* Right-side floating circles — mirrors the screenshot/attach
-                stack on the left. Hub-toggle first, then the permission
-                mode picker (Ask / Auto) so the user can flip safety modes
-                without crowding the in-pill chrome. */}
+                stack on the left. Hub-toggle first, then "Open in CLI"
+                (click launches in preferred terminal, right-click picks). */}
             <div data-clui-ui className="circles-out-right">
               <HubCircleButton />
-              <PermissionModePicker />
+              <TerminalLaunchControl />
             </div>
 
             {/* Input pill — chrome around the InputBar is drag-active.
