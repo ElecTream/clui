@@ -60,6 +60,56 @@ function healStaleStubs() {
 
 healStaleStubs()
 
+// 1b. Ensure Electron's native binary is actually downloaded.
+//     Electron's npm package only carries metadata + an install.js that
+//     fetches the ~250MB binary at install time. That fetch can fail
+//     silently (network blip, GitHub rate limit, cache corruption), exit 0,
+//     and leave node_modules/electron/dist/ empty. electron-vite then dies
+//     with "Electron uninstall" on dev start.
+//
+//     This runs install.js — if it's already installed, install.js's
+//     isInstalled() check exits cleanly. If not, it forces the download.
+function ensureElectronBinary() {
+  const electronDir = path.join(ROOT, 'node_modules', 'electron')
+  if (!fs.existsSync(electronDir)) {
+    // No Electron dep at all — nothing to do
+    return
+  }
+
+  const platformBinary =
+    isWin ? path.join(electronDir, 'dist', 'electron.exe')
+    : isMac ? path.join(electronDir, 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
+    : path.join(electronDir, 'dist', 'electron')
+
+  if (fs.existsSync(platformBinary)) return
+
+  console.log('postinstall: Electron binary missing — running electron/install.js to fetch it')
+  const installJs = path.join(electronDir, 'install.js')
+  if (!fs.existsSync(installJs)) {
+    console.warn('postinstall: electron/install.js not found — skipping')
+    return
+  }
+  const r = spawnSync(process.execPath, [installJs], {
+    cwd: electronDir,
+    stdio: 'inherit',
+    env: process.env,
+  })
+  if (r.status !== 0) {
+    console.error('postinstall: electron install.js failed with status ' + r.status)
+    console.error('postinstall: try `cd node_modules/electron && node install.js` manually,')
+    console.error('postinstall: check network access to github.com / electronjs.org caches')
+    process.exit(r.status ?? 1)
+  }
+  // Verify it actually appeared
+  if (!fs.existsSync(platformBinary)) {
+    console.error(`postinstall: install.js returned 0 but ${platformBinary} still missing`)
+    console.error('postinstall: this typically means a network or proxy issue blocked the GitHub release download')
+    process.exit(1)
+  }
+}
+
+ensureElectronBinary()
+
 // 2. Patches. These were originally to make BUILDS-FROM-SOURCE work on
 //    Windows with VS Build Tools 18.5 (VS 2026). Since we no longer rebuild
 //    on Windows they're not needed there, but we still apply on non-Windows
