@@ -328,32 +328,35 @@ async function launchDefaultTerminal(sessionId: string | null, projectPath: stri
 }
 
 /**
- * Launch Claude in a Windows terminal: prefer Windows Terminal (`wt.exe`), fall back to
- * a detached `cmd.exe` window. Both ship with Win10 22H2+ / Win11.
+ * Launch Claude in a new Windows terminal window, honoring the user's
+ * "default terminal application" choice from
+ *   Settings → Privacy & Security → For Developers → Terminal
+ * (Windows Terminal / Console Host / Let Windows decide).
+ *
+ * We invoke `cmd /c start "" /D <cwd> cmd /k claude ...`. The `start`
+ * command spawns a new console process and Windows decides which
+ * terminal app hosts it based on the default-terminal setting — so a
+ * user who picked WT gets WT, a user who picked Console Host gets
+ * conhost, etc. Previously we hard-launched `wt.exe` first which
+ * bypassed that setting.
  */
 async function launchWindowsTerminal(sessionId: string | null, projectPath: string): Promise<void> {
   const claudeArgs = sessionId ? ['claude', '--resume', sessionId] : ['claude']
-  // wt.exe is the Windows Terminal launcher. -d sets working directory.
-  // Try wt.exe first (better UX); fall back to cmd.exe with start /D.
-  const launchers: Array<{ exe: string; args: string[] }> = [
-    { exe: 'wt.exe', args: ['-d', projectPath, ...claudeArgs] },
-    { exe: 'cmd.exe', args: ['/c', 'start', '', '/D', projectPath, 'cmd.exe', '/k', ...claudeArgs] },
-  ]
-  for (const { exe, args } of launchers) {
-    try {
-      const child = spawn(exe, args, {
-        cwd: projectPath,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: false,
-      })
-      child.unref()
-      return
-    } catch {
-      // try next
-    }
-  }
-  throw new Error('Failed to launch any Windows terminal (tried wt.exe, cmd.exe)')
+  // `start ""` — empty title arg avoids start treating the next quoted
+  // string as a window title. /D sets the working directory of the
+  // spawned cmd. `cmd /k` keeps the shell open after claude exits so
+  // the user can keep typing.
+  const child = spawn(
+    'cmd.exe',
+    ['/c', 'start', '', '/D', projectPath, 'cmd.exe', '/k', ...claudeArgs],
+    {
+      cwd: projectPath,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    },
+  )
+  child.unref()
 }
 
 async function launchTerminal(terminal: InstalledTerminal, sessionId: string | null, projectPath: string): Promise<void> {

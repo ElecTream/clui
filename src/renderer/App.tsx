@@ -345,21 +345,18 @@ export default function App() {
               <TerminalLaunchControl />
             </div>
 
-            {/* Input pill — chrome around the InputBar is drag-active.
-                Textarea + buttons inside opt out of drag automatically
-                (the universal CSS rule excludes them) so click-to-focus
-                still works. Trimmed to a thin chrome rim — drag from
-                any of the chrome (above/below the textarea, the rounded
-                ends) or use the side-circles + button row above. */}
+            {/* Input pill — no drag region anymore. Dragging the pill
+                window happens via the dedicated drag-grip in the
+                TabStrip (right of the mode picker). Click-to-focus on
+                the textarea works without any drag/no-drag dance. */}
             <div
               ref={inputDragRef}
               data-clui-ui
-              data-clui-drag="true"
               className="glass-surface w-full"
               style={{
                 minHeight: 50,
                 borderRadius: 25,
-                padding: '3px 10px 3px 16px',
+                padding: '0 10px 0 16px',
                 background: colors.inputPillBg,
               }}
             >

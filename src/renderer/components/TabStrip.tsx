@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowsClockwise } from '@phosphor-icons/react'
+import { ArrowsClockwise, DotsSixVertical } from '@phosphor-icons/react'
 import { ActiveTabChip } from './TabSwitcher'
 import { ModelPicker, PermissionModePicker } from './StatusBar'
 import { useColors, useThemeStore } from '../theme'
@@ -15,6 +15,38 @@ import { useColors, useThemeStore } from '../theme'
  *
  *   [active-tab indicator] [model] [mode] [optional update]
  */
+
+/**
+ * Dedicated drag handle. Renders as a simple grip icon; the OS drags
+ * the window from any pixel of this element via -webkit-app-region:
+ * drag (set by [data-clui-drag='true'] in index.css). Not a <button>
+ * because the universal "buttons inside drag regions opt out" CSS rule
+ * would otherwise neutralize it.
+ */
+function DragHandle() {
+  const colors = useColors()
+  return (
+    <div
+      data-clui-drag="true"
+      title="Drag to move the pill"
+      style={{
+        width: 22,
+        height: 22,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'grab',
+        color: colors.textTertiary,
+        opacity: 0.55,
+        transition: 'opacity var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out)',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.55' }}
+    >
+      <DotsSixVertical size={14} weight="bold" />
+    </div>
+  )
+}
 
 function UpdateButton() {
   const colors = useColors()
@@ -75,6 +107,7 @@ export function TabStrip() {
         <ModelPicker />
         <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
         <PermissionModePicker />
+        <DragHandle />
       </div>
 
       <div
