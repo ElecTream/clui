@@ -46,12 +46,13 @@ function UpdateButton() {
   return (
     <button
       data-clui-ui
+      data-clui-no-drag="true"
       onClick={updateReady ? () => window.clui.installUpdate() : undefined}
-      className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+      className="clui-icon-btn"
       style={{ color: colors.accent, cursor: updateReady ? 'pointer' : 'default' }}
       title={updateReady ? `Update to v${updateVersion} — click to restart` : `Downloading v${updateVersion}…`}
     >
-      <ArrowsClockwise size={14} className={updateReady ? '' : 'animate-spin'} />
+      <ArrowsClockwise size={16} className={updateReady ? '' : 'animate-spin'} />
     </button>
   )
 }
@@ -64,23 +65,27 @@ export function TabStrip() {
   const createTab = useSessionStore((s) => s.createTab)
   const closeTab = useSessionStore((s) => s.closeTab)
   const toggleExpanded = useSessionStore((s) => s.toggleExpanded)
-  const colors = useColors()
 
   return (
     <div
       data-clui-ui
       className="flex items-center no-drag"
-      style={{ padding: '8px 0' }}
+      style={{
+        // Phase 0.0 spacing scale — was '8px 0' literal.
+        padding: 'var(--clui-space-2) 0',
+        gap: 'var(--clui-space-1)',
+      }}
     >
       {/* Scrollable tabs area — clipped by master card edge */}
       <div className="relative min-w-0 flex-1">
         <div
-          className="flex items-center gap-1 overflow-x-auto min-w-0"
+          className="flex items-center overflow-x-auto min-w-0"
           style={{
             scrollbarWidth: 'none',
-            paddingLeft: 8,
+            gap: 'var(--clui-space-1)',
+            paddingLeft: 'var(--clui-space-2)',
             // Extra right breathing room so clipped tabs fade out before the edge.
-            paddingRight: 14,
+            paddingRight: 'var(--clui-space-4)',
             // Right-only content fade so the parent card's own animated background
             // shows through cleanly in both collapsed and expanded states.
             maskImage: 'linear-gradient(to right, black 0%, black calc(100% - 40px), transparent 100%)',
@@ -91,42 +96,53 @@ export function TabStrip() {
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId
               return (
-                <motion.div
+                <motion.button
                   key={tab.id}
                   layout
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.92 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.15, ease: [0.2, 0, 0.1, 1] }}
                   onClick={() => selectTab(tab.id)}
-                  className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
-                  style={{
-                    background: isActive ? colors.tabActive : 'transparent',
-                    border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
-                    borderRadius: 9999,
-                    padding: '4px 10px',
-                    fontSize: 12,
-                    color: isActive ? colors.textPrimary : colors.textTertiary,
-                    fontWeight: isActive ? 500 : 400,
-                  }}
+                  className="clui-tab-pill group"
+                  data-active={isActive ? 'true' : 'false'}
+                  data-clui-no-drag="true"
+                  // Tooltip exposes the working dir alongside the truncated title —
+                  // tabs share titles often (e.g. "main") across different repos.
+                  title={tab.title}
                 >
                   <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
-                  <span className="truncate flex-1">{tab.title}</span>
+                  <span className="truncate flex-1" style={{ minWidth: 0 }}>{tab.title}</span>
                   {tabs.length > 1 && (
-                    <button
+                    <span
+                      role="button"
+                      aria-label="Close tab"
                       onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
+                      className="flex-shrink-0 flex items-center justify-center"
                       style={{
-                        opacity: isActive ? 0.5 : 0,
-                        color: colors.textSecondary,
+                        width: 14,
+                        height: 14,
+                        marginRight: -2,
+                        borderRadius: 4,
+                        opacity: isActive ? 0.55 : 0,
+                        color: 'var(--clui-text-secondary)',
+                        transition: 'opacity var(--clui-state-duration) var(--clui-ease-out), background var(--clui-state-duration) var(--clui-ease-out)',
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget as HTMLElement
+                        el.style.opacity = '1'
+                        el.style.background = 'var(--clui-surface-active)'
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget as HTMLElement
+                        el.style.opacity = isActive ? '0.55' : '0'
+                        el.style.background = 'transparent'
+                      }}
                     >
                       <X size={10} />
-                    </button>
+                    </span>
                   )}
-                </motion.div>
+                </motion.button>
               )
             })}
           </AnimatePresence>
@@ -134,14 +150,21 @@ export function TabStrip() {
       </div>
 
       {/* Pinned action buttons — always visible on the right */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-1 pr-2">
+      <div
+        className="flex items-center flex-shrink-0"
+        style={{
+          gap: 'var(--clui-space-1)',
+          marginLeft: 'var(--clui-space-1)',
+          paddingRight: 'var(--clui-space-2)',
+        }}
+      >
         <button
           onClick={() => createTab()}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
-          style={{ color: colors.textTertiary }}
+          data-clui-no-drag="true"
+          className="clui-icon-btn"
           title="New tab"
         >
-          <Plus size={14} />
+          <Plus size={16} />
         </button>
 
         <HistoryPicker />
@@ -153,11 +176,11 @@ export function TabStrip() {
         {isExpanded && (
           <button
             onClick={() => toggleExpanded()}
-            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
-            style={{ color: colors.textTertiary }}
+            data-clui-no-drag="true"
+            className="clui-icon-btn"
             title="Minimize"
           >
-            <Minus size={14} />
+            <Minus size={16} />
           </button>
         )}
       </div>

@@ -339,3 +339,95 @@ input::placeholder {
 .no-drag {
   cursor: default;
 }
+/* ─── Icon button (Phase 0.0 design language) ───
+ * Used by in-pill chrome buttons that aren't part of the larger
+ * action-circle stack. Spec from the locked plan:
+ *  - 28px minimum hit zone (>= --clui-hit-zone)
+ *  - 18px visible icon centered
+ *  - hover brightens surface by ~6% (no border, no scale)
+ *  - focus ring: 2px var(--clui-accent) at ~60% opacity, 2px offset
+ *  - 120ms ease-out for color + background only
+ *
+ * Apply via className="clui-icon-btn"; pass the icon as a child.
+ * Use [data-active] attribute (not a class) so the consumer can drive
+ * "selected" styling without re-styling the base.
+ */
+.clui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--clui-hit-zone, 28px);
+  height: var(--clui-hit-zone, 28px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--clui-radius-sm, 6px);
+  color: var(--clui-text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  outline: none;
+  transition:
+    color var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out),
+    background var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out);
+}
+.clui-icon-btn:hover:not(:disabled) {
+  color: var(--clui-text-primary);
+  background: var(--clui-surface-hover);
+}
+.clui-icon-btn:active:not(:disabled) {
+  background: var(--clui-surface-active);
+}
+.clui-icon-btn:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--clui-accent) 60%, transparent);
+}
+.clui-icon-btn:disabled {
+  color: var(--clui-btn-disabled);
+  cursor: default;
+}
+.clui-icon-btn[data-active='true'] {
+  color: var(--clui-text-primary);
+  background: var(--clui-surface-hover);
+}
+
+/* ─── Tab pill (Phase 0.0 design language) ───
+ * The in-pill TabStrip uses these for individual tabs. Same hit-zone +
+ * focus-ring rules as clui-icon-btn but rectangular with the runtime
+ * status dot inline. Border lives only on the active tab; inactive tabs
+ * lean on padding + surface contrast (per the plan: "prefer spacing +
+ * surface contrast over lines").
+ */
+.clui-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--clui-space-2, 8px);
+  height: var(--clui-hit-zone, 28px);
+  padding: 0 var(--clui-space-3, 12px);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  color: var(--clui-text-tertiary);
+  font-size: 12px;
+  font-weight: var(--clui-font-weight-body, 450);
+  letter-spacing: var(--clui-letter-spacing-body, -0.005em);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 180px;
+  outline: none;
+  transition:
+    color var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out),
+    background var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out),
+    border-color var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out);
+}
+.clui-tab-pill:hover:not([data-active='true']) {
+  color: var(--clui-text-secondary);
+  background: var(--clui-tab-hover);
+}
+.clui-tab-pill[data-active='true'] {
+  background: var(--clui-tab-active);
+  border-color: var(--clui-tab-active-border);
+  color: var(--clui-text-primary);
+  font-weight: var(--clui-font-weight-emphasis, 600);
+}
+.clui-tab-pill:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--clui-accent) 60%, transparent);
+}

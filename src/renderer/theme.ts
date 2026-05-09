@@ -7,32 +7,36 @@ import type { PreferredTerminalId, TerminalId } from '../shared/types'
 
 // ─── Color palettes ───
 
+// Phase 0.0 — near-black dark per the locked design language. Plan spec:
+//   --bg: #0a0a0a, --surface: #131313, --text: #e8e8e8, --divider: #1a1a1a.
+// Was previously a mid-gray (#242422 / #353530); the lift to near-black makes
+// the orange accent pop and the shadow stack actually read on dark monitors.
 const darkColors = {
-  // Container (glass surfaces)
-  containerBg: '#242422',
-  containerBgCollapsed: '#21211e',
-  containerBorder: '#3b3b36',
-  containerShadow: '0 8px 28px rgba(0, 0, 0, 0.35), 0 1px 6px rgba(0, 0, 0, 0.25)',
-  cardShadow: '0 2px 8px rgba(0,0,0,0.35)',
-  cardShadowCollapsed: '0 2px 6px rgba(0,0,0,0.4)',
+  // Container (glass surfaces) — near-black, +1 step lift over bg
+  containerBg: '#0f0f0f',
+  containerBgCollapsed: '#0a0a0a',
+  containerBorder: '#1f1f1f',
+  containerShadow: '0 8px 24px rgba(0, 0, 0, 0.55), 0 1px 4px rgba(0, 0, 0, 0.4)',
+  cardShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+  cardShadowCollapsed: '0 2px 6px rgba(0, 0, 0, 0.55)',
 
-  // Surface layers
-  surfacePrimary: '#353530',
-  surfaceSecondary: '#42423d',
-  surfaceHover: 'rgba(255, 255, 255, 0.05)',
-  surfaceActive: 'rgba(255, 255, 255, 0.08)',
+  // Surface layers — graded steps above the container
+  surfacePrimary: '#1a1a1a',
+  surfaceSecondary: '#252525',
+  surfaceHover: 'rgba(255, 255, 255, 0.06)',
+  surfaceActive: 'rgba(255, 255, 255, 0.10)',
 
   // Input
   inputBg: 'transparent',
-  inputBorder: '#3b3b36',
-  inputFocusBorder: 'rgba(217, 119, 87, 0.4)',
-  inputPillBg: '#2a2a27',
+  inputBorder: '#1f1f1f',
+  inputFocusBorder: 'rgba(217, 119, 87, 0.45)',
+  inputPillBg: '#161616',
 
-  // Text
-  textPrimary: '#ccc9c0',
-  textSecondary: '#c0bdb2',
-  textTertiary: '#76766e',
-  textMuted: '#353530',
+  // Text — high-contrast on near-black
+  textPrimary: '#e8e8e8',
+  textSecondary: '#c4c4c4',
+  textTertiary: '#888888',
+  textMuted: '#1f1f1f',
 
   // Accent — orange
   accent: '#d97757',
@@ -52,24 +56,24 @@ const darkColors = {
   statusPermissionGlow: 'rgba(217, 119, 87, 0.4)',
 
   // Tab
-  tabActive: '#353530',
-  tabActiveBorder: '#4a4a45',
+  tabActive: '#1a1a1a',
+  tabActiveBorder: '#2a2a2a',
   tabInactive: 'transparent',
-  tabHover: 'rgba(255, 255, 255, 0.05)',
+  tabHover: 'rgba(255, 255, 255, 0.06)',
 
   // User message bubble
-  userBubble: '#353530',
-  userBubbleBorder: '#4a4a45',
-  userBubbleText: '#ccc9c0',
+  userBubble: '#1a1a1a',
+  userBubbleBorder: '#2a2a2a',
+  userBubbleText: '#e8e8e8',
 
   // Tool card
-  toolBg: '#353530',
-  toolBorder: '#4a4a45',
+  toolBg: '#1a1a1a',
+  toolBorder: '#2a2a2a',
   toolRunningBorder: 'rgba(217, 119, 87, 0.3)',
   toolRunningBg: 'rgba(217, 119, 87, 0.05)',
 
   // Timeline
-  timelineLine: '#353530',
+  timelineLine: '#1f1f1f',
   timelineNode: 'rgba(217, 119, 87, 0.2)',
   timelineNodeActive: '#d97757',
 
@@ -87,30 +91,30 @@ const darkColors = {
   sendDisabled: 'rgba(217, 119, 87, 0.3)',
 
   // Popover
-  popoverBg: '#292927',
-  popoverBorder: '#3b3b36',
-  popoverShadow: '0 4px 20px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2)',
+  popoverBg: '#141414',
+  popoverBorder: '#1f1f1f',
+  popoverShadow: '0 6px 24px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.35)',
 
   // Code block
-  codeBg: '#1a1a18',
+  codeBg: '#070707',
 
   // Mic button
-  micBg: '#353530',
-  micColor: '#c0bdb2',
-  micDisabled: '#42423d',
+  micBg: '#1a1a1a',
+  micColor: '#c4c4c4',
+  micDisabled: '#252525',
 
   // Placeholder
-  placeholder: '#6b6b60',
+  placeholder: '#6a6a6a',
 
   // Disabled button color
-  btnDisabled: '#42423d',
+  btnDisabled: '#252525',
 
   // Text on accent backgrounds
   textOnAccent: '#ffffff',
 
   // Button hover (CSS-only stack buttons)
-  btnHoverColor: '#c0bdb2',
-  btnHoverBg: '#302f2d',
+  btnHoverColor: '#e8e8e8',
+  btnHoverBg: '#1f1f1f',
 
   // Accent border variants (replaces hex-alpha concatenation antipattern)
   accentBorder: 'rgba(217, 119, 87, 0.19)',
