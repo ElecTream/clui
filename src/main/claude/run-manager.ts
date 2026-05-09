@@ -1,11 +1,12 @@
 import { spawn, execSync, ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { homedir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { StreamParser } from '../stream-parser'
 import { normalize } from './event-normalizer'
 import { log as _log } from '../logger'
 import { getCliEnv } from '../cli-env'
+import { findClaudeBinaryWin, killTree, wrapForCmd } from '../platform/win-process'
 import type { ClaudeEvent, NormalizedEvent, RunOptions, EnrichedError } from '../../shared/types'
 
 const MAX_RING_LINES = 100
@@ -116,6 +117,10 @@ export class RunManager extends EventEmitter {
   }
 
   private _findClaudeBinary(): string {
+    if (process.platform === 'win32') {
+      return findClaudeBinaryWin()
+    }
+
     const candidates = [
       '/usr/local/bin/claude',
       '/opt/homebrew/bin/claude',
@@ -142,9 +147,10 @@ export class RunManager extends EventEmitter {
 
   private _getEnv(): NodeJS.ProcessEnv {
     const env = getCliEnv()
-    const binDir = this.claudeBinary.substring(0, this.claudeBinary.lastIndexOf('/'))
-    if (env.PATH && !env.PATH.includes(binDir)) {
-      env.PATH = `${binDir}:${env.PATH}`
+    const binDir = dirname(this.claudeBinary)
+    const sep = process.platform === 'win32' ? ';' : ':'
+    if (binDir && env.PATH && !env.PATH.includes(binDir)) {
+      env.PATH = `${binDir}${sep}${env.PATH}`
     }
 
     return env
@@ -212,7 +218,9 @@ export class RunManager extends EventEmitter {
       log(`Starting run ${requestId}`)
     }
 
-    const child = spawn(this.claudeBinary, args, {
+    const [exe, finalArgs] =
+      process.platform === 'win32' ? wrapForCmd(this.claudeBinary, args) : [this.claudeBinary, args]
+    const child = spawn(exe, finalArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       env: this._getEnv(),
@@ -354,17 +362,22 @@ export class RunManager extends EventEmitter {
     if (!handle) return false
 
     log(`Cancelling run ${requestId}`)
-    handle.process.kill('SIGINT')
-
-    // Fallback: SIGKILL if process hasn't exited after 5s.
-    // Only check exitCode — process.killed is set true by the SIGINT call above,
-    // so checking !killed would prevent the fallback from ever firing.
-    setTimeout(() => {
-      if (handle.process.exitCode === null) {
-        log(`Force killing run ${requestId} (SIGINT did not terminate)`)
-        handle.process.kill('SIGKILL')
-      }
-    }, 5000)
+    if (process.platform === 'win32') {
+      // Windows: signals don't deliver — TerminateProcess + leaked tool subprocesses.
+      // taskkill /T walks the whole tree and SIGKILL-equivalents the children.
+      killTree(handle.process.pid)
+    } else {
+      handle.process.kill('SIGINT')
+      // Fallback: SIGKILL if process hasn't exited after 5s.
+      // Only check exitCode — process.killed is set true by the SIGINT call above,
+      // so checking !killed would prevent the fallback from ever firing.
+      setTimeout(() => {
+        if (handle.process.exitCode === null) {
+          log(`Force killing run ${requestId} (SIGINT did not terminate)`)
+          handle.process.kill('SIGKILL')
+        }
+      }, 5000)
+    }
 
     return true
   }

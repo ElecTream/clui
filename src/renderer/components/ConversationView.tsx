@@ -19,6 +19,7 @@ import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { getFileIcon } from './FileMentionMenu'
 import { useColors, useThemeStore } from '../theme'
+import { SUMMON_SHORTCUT } from '../utils/shortcuts'
 import type { Message, Attachment } from '../../shared/types'
 
 // ─── Constants ───
@@ -338,7 +339,7 @@ function EmptyState() {
         Choose folder
       </button>
       <span className="text-[11px]" style={{ color: colors.textTertiary }}>
-        Press <strong style={{ color: colors.textSecondary }}>⌥ + Space</strong> to show/hide this overlay
+        Press <strong style={{ color: colors.textSecondary }}>{SUMMON_SHORTCUT}</strong> to show/hide this overlay
       </span>
     </div>
   )

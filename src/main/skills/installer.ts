@@ -9,10 +9,12 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync } from 'fs'
-import { join, dirname } from 'path'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import { join } from 'path'
 import { homedir } from 'os'
-import { execSync } from 'child_process'
 import { randomUUID } from 'crypto'
+import * as tar from 'tar'
 import { SKILLS, type SkillEntry } from './manifest'
 
 /** Directory containing bundled skill sources (relative to main process __dirname) */
@@ -90,18 +92,36 @@ async function installGithubSkill(
     // Download pinned tarball and extract only the skill subdirectory.
     // GitHub tarballs have a top-level directory like "anthropics-skills-<sha>/".
     // We strip the top-level + intermediate path components to get just the skill files.
-    const { repo, path, commitSha } = entry.source
-    const pathDepth = path.split('/').length + 1 // +1 for the github top-level dir
+    const { repo, path: skillPath, commitSha } = entry.source
+    const pathDepth = skillPath.split('/').length + 1 // +1 for the github top-level dir
     const tarballUrl = `https://api.github.com/repos/${repo}/tarball/${commitSha}`
 
-    // Use curl + tar — both always available on macOS
-    const cmd = [
-      `curl -sL "${tarballUrl}"`,
-      '|',
-      `tar -xz --strip-components=${pathDepth} -C "${tmpDir}" "*/${path}"`,
-    ].join(' ')
-
-    execSync(cmd, { timeout: 60000, stdio: 'pipe' })
+    // Stream-fetch + tar extract — no shell, works on Windows + macOS + Linux.
+    const ac = new AbortController()
+    const timeout = setTimeout(() => ac.abort(), 60000)
+    try {
+      const res = await fetch(tarballUrl, {
+        signal: ac.signal,
+        redirect: 'follow',
+        headers: { 'User-Agent': 'clui-skills-installer' },
+      })
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status} fetching ${tarballUrl}`)
+      }
+      // Web ReadableStream → Node Readable for piping into tar.
+      const nodeStream = Readable.fromWeb(res.body as any)
+      await pipeline(
+        nodeStream,
+        tar.x({
+          cwd: tmpDir,
+          strip: pathDepth,
+          // Only extract files inside the requested skill path.
+          filter: (p) => p.includes(`/${skillPath}/`) || p.endsWith(`/${skillPath}`),
+        }),
+      )
+    } finally {
+      clearTimeout(timeout)
+    }
 
     // Validate extracted files
     onStatus({ name: entry.name, state: 'validating' })

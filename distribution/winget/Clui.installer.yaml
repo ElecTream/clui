@@ -1,0 +1,22 @@
+# winget installer manifest — fill in placeholders, then `wingetcreate submit` to PR
+# upstream into microsoft/winget-pkgs.
+#
+# Required fixups before submitting:
+#   1. Replace <YOUR_GITHUB_HANDLE> with your GitHub username (this is the publisher slug).
+#   2. Update PackageVersion + InstallerUrl + InstallerSha256 each release; `wingetcreate update`
+#      automates this from the Release URL.
+#
+# Schema reference: https://learn.microsoft.com/windows/package-manager/package/manifest
+
+PackageIdentifier: <YOUR_GITHUB_HANDLE>.Clui
+PackageVersion: 0.2.0
+MinimumOSVersion: 10.0.17763.0   # Win10 1809+ (ConPTY availability)
+InstallerLocale: en-US
+InstallerType: nullsoft           # NSIS
+Scope: user                       # NSIS perMachine: false
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/<YOUR_GITHUB_HANDLE>/clui/releases/download/v0.2.0-win.0/Clui-Setup-0.2.0-win.0.exe
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+ManifestType: installer
+ManifestVersion: 1.6.0

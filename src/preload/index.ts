@@ -33,7 +33,7 @@ export interface CluiAPI {
   openInTerminal(sessionId: string | null, projectPath?: string, terminalId?: PreferredTerminalId | null): Promise<boolean>
   listInstalledTerminals(): Promise<TerminalInstallation[]>
   attachFiles(): Promise<Attachment[] | null>
-  takeScreenshot(): Promise<Attachment | null>
+  takeScreenshot(mode?: 'region' | 'fullscreen'): Promise<Attachment | null>
   pasteImage(dataUrl: string): Promise<Attachment | null>
   transcribeAudio(audioBase64: string): Promise<{ error: string | null; errorType?: string; transcript: string | null }>
   fixWhisper(): Promise<{ ok: boolean; error?: string }>
@@ -87,6 +87,7 @@ export interface CluiAPI {
   onError(callback: (tabId: string, error: EnrichedError) => void): () => void
   onSkillStatus(callback: (status: { name: string; state: string; error?: string; reason?: string }) => void): () => void
   onWindowShown(callback: () => void): () => void
+  onActivateTabByIndex(callback: (index: number) => void): () => void
 
   // ─── Auto-update ───
   checkForUpdate(): Promise<void>
@@ -111,7 +112,7 @@ const api: CluiAPI = {
   openInTerminal: (sessionId, projectPath, terminalId) => ipcRenderer.invoke(IPC.OPEN_IN_TERMINAL, { sessionId, projectPath, terminalId }),
   listInstalledTerminals: () => ipcRenderer.invoke(IPC.LIST_INSTALLED_TERMINALS),
   attachFiles: () => ipcRenderer.invoke(IPC.ATTACH_FILES),
-  takeScreenshot: () => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT),
+  takeScreenshot: (mode?: 'region' | 'fullscreen') => ipcRenderer.invoke(IPC.TAKE_SCREENSHOT, mode),
   pasteImage: (dataUrl) => ipcRenderer.invoke(IPC.PASTE_IMAGE, dataUrl),
   transcribeAudio: (audioBase64) => ipcRenderer.invoke(IPC.TRANSCRIBE_AUDIO, audioBase64),
   fixWhisper: () => ipcRenderer.invoke(IPC.FIX_WHISPER),
@@ -207,6 +208,12 @@ const api: CluiAPI = {
     const handler = () => callback()
     ipcRenderer.on(IPC.WINDOW_SHOWN, handler)
     return () => ipcRenderer.removeListener(IPC.WINDOW_SHOWN, handler)
+  },
+
+  onActivateTabByIndex: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, index: number) => callback(index)
+    ipcRenderer.on(IPC.ACTIVATE_TAB_BY_INDEX, handler)
+    return () => ipcRenderer.removeListener(IPC.ACTIVATE_TAB_BY_INDEX, handler)
   },
 
   // ─── Auto-update ───

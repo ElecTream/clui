@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, protocol, net, desktopCapturer, clipboard } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { basename, join, resolve, normalize } from 'path'
 import { existsSync, readdirSync, statSync, createReadStream, mkdirSync, writeFileSync, chmodSync } from 'fs'
@@ -410,8 +410,41 @@ function openScriptInTerminal(scriptPath: string, appPath?: string): Promise<voi
 }
 
 async function launchDefaultTerminal(sessionId: string | null, projectPath: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await launchWindowsTerminal(sessionId, projectPath)
+    return
+  }
   const scriptPath = createTerminalLaunchScript(projectPath, sessionId)
   await openScriptInTerminal(scriptPath)
+}
+
+/**
+ * Launch Claude in a Windows terminal: prefer Windows Terminal (`wt.exe`), fall back to
+ * a detached `cmd.exe` window. Both ship with Win10 22H2+ / Win11.
+ */
+async function launchWindowsTerminal(sessionId: string | null, projectPath: string): Promise<void> {
+  const claudeArgs = sessionId ? ['claude', '--resume', sessionId] : ['claude']
+  // wt.exe is the Windows Terminal launcher. -d sets working directory.
+  // Try wt.exe first (better UX); fall back to cmd.exe with start /D.
+  const launchers: Array<{ exe: string; args: string[] }> = [
+    { exe: 'wt.exe', args: ['-d', projectPath, ...claudeArgs] },
+    { exe: 'cmd.exe', args: ['/c', 'start', '', '/D', projectPath, 'cmd.exe', '/k', ...claudeArgs] },
+  ]
+  for (const { exe, args } of launchers) {
+    try {
+      const child = spawn(exe, args, {
+        cwd: projectPath,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false,
+      })
+      child.unref()
+      return
+    } catch {
+      // try next
+    }
+  }
+  throw new Error('Failed to launch any Windows terminal (tried wt.exe, cmd.exe)')
 }
 
 async function launchTerminal(terminal: InstalledTerminal, sessionId: string | null, projectPath: string): Promise<void> {
@@ -521,10 +554,26 @@ function createWindow(): void {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
-    roundedCorners: true,
+    // roundedCorners is macOS-only; setting it on Windows is ignored and in some
+    // Electron 35 builds triggers a brief DWM chrome flash when transparency is
+    // re-applied. Explicitly mac-only.
+    ...(process.platform === 'darwin' ? { roundedCorners: true } : {}),
+    // Windows: thickFrame defaults to true even with frame:false, which keeps the
+    // DWM "thick frame" + shadow + resize border invisible-but-present. That
+    // invisible frame is what occasionally flashes a "Clui" title bar when the
+    // compositor restarts or the window's always-on-top level toggles. Off.
+    ...(process.platform === 'win32' ? { thickFrame: false } : {}),
+    // Don't paint anything until ready-to-show fires. Without this, transparent
+    // windows on Windows can render one frame of system chrome before the
+    // renderer's transparent body composites over it.
+    paintWhenInitiallyHidden: false,
     backgroundColor: '#00000000',
     show: false,
-    icon: join(__dirname, '../../resources/icon.icns'),
+    icon: join(
+      __dirname,
+      '../../resources',
+      process.platform === 'darwin' ? 'icon.icns' : process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+    ),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -543,7 +592,11 @@ function createWindow(): void {
     // { forward: true } ensures mousemove events still reach the renderer
     // so it can toggle click-through off when cursor enters interactive UI.
     mainWindow?.setIgnoreMouseEvents(true, { forward: true })
-    if (process.env.ELECTRON_RENDERER_URL) {
+    // DevTools opens only when CLUI_DEVTOOLS=1 in dev. The detached window has its
+    // own non-frameless OS chrome, which renders as a phantom title bar above the
+    // pill on Windows. Off by default; enable on demand for debugging:
+    //   $env:CLUI_DEVTOOLS = "1"; npm run dev
+    if (process.env.ELECTRON_RENDERER_URL && process.env.CLUI_DEVTOOLS === '1') {
       mainWindow?.webContents.openDevTools({ mode: 'detach' })
     }
   })
@@ -782,6 +835,9 @@ function getOrCreateGridWindow(): BrowserWindow {
     hasShadow: false,
     focusable: false,
     show: false,
+    paintWhenInitiallyHidden: false,
+    ...(process.platform === 'win32' ? { thickFrame: false } : {}),
+    backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -1835,8 +1891,89 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
   })
 })
 
-ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
+/**
+ * Windows region screenshot: invoke the OS Snipping Tool via the `ms-screenclip:`
+ * URI, then poll the clipboard for the resulting PNG. Returns null on cancel/timeout.
+ *
+ * Why this approach: Windows has no CLI equivalent of macOS's `screencapture -i`.
+ * Building a custom selection overlay is ~150 lines of UI code; ms-screenclip
+ * gives us the OS-native experience for free, including multi-monitor handling
+ * and the freeform/window/fullscreen mode toggles in the Snipping Tool toolbar.
+ */
+async function takeWindowsRegionScreenshot(): Promise<any> {
+  // Snapshot existing clipboard image so we can detect a NEW snip vs. pre-existing image.
+  const previousImage = clipboard.readImage()
+  const previousHash = previousImage.isEmpty() ? '' : previousImage.toPNG().toString('base64').slice(0, 64)
+
+  // Hide the pill so it's not in the snipping target.
+  if (mainWindow) {
+    mainWindow.hide()
+    await new Promise((r) => setTimeout(r, 150))
+  }
+
+  // Trigger the Windows Snipping Tool. shell.openExternal dispatches the URI to
+  // the OS handler (ms-screenclip → SnippingTool.exe on Win10 1809+ / Win11).
+  try {
+    await shell.openExternal('ms-screenclip:')
+  } catch (err) {
+    log(`[screenshot] failed to open ms-screenclip: ${(err as Error).message}`)
+    if (mainWindow) mainWindow.show()
+    broadcast(IPC.WINDOW_SHOWN)
+    return null
+  }
+
+  // Poll the clipboard for up to 60 seconds. The user may take a while to drag-select.
+  const deadline = Date.now() + 60_000
+  const POLL_MS = 200
+  let snippedImage: Electron.NativeImage | null = null
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, POLL_MS))
+    const cur = clipboard.readImage()
+    if (cur.isEmpty()) continue
+    const curHash = cur.toPNG().toString('base64').slice(0, 64)
+    if (curHash === previousHash) continue
+    snippedImage = cur
+    break
+  }
+
+  // Restore pill regardless of outcome.
+  if (mainWindow) mainWindow.show()
+  broadcast(IPC.WINDOW_SHOWN)
+
+  if (!snippedImage) {
+    log('[screenshot] region capture cancelled or timed out')
+    return null
+  }
+
+  const { join } = require('path')
+  const { tmpdir } = require('os')
+  const { writeFileSync } = require('fs')
+  const png = snippedImage.toPNG()
+  const screenshotPath = join(tmpdir(), `clui-screenshot-${Date.now()}.png`)
+  writeFileSync(screenshotPath, png)
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'image',
+    name: `screenshot ${++screenshotCounter}.png`,
+    path: screenshotPath,
+    mimeType: 'image/png',
+    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    size: png.length,
+  }
+}
+
+ipcMain.handle(IPC.TAKE_SCREENSHOT, async (_event, mode?: 'region' | 'fullscreen') => {
   if (!mainWindow) return null
+
+  // Default mode: region on Windows (Snipping Tool), fullscreen elsewhere.
+  const resolvedMode: 'region' | 'fullscreen' =
+    mode ?? (process.platform === 'win32' ? 'region' : 'fullscreen')
+
+  if (resolvedMode === 'region' && process.platform === 'win32') {
+    return takeWindowsRegionScreenshot()
+  }
 
   if (SPACES_DEBUG) snapshotWindowState('screenshot pre-hide')
   mainWindow.hide()
@@ -1846,10 +1983,39 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
     const { execSync } = require('child_process')
     const { join } = require('path')
     const { tmpdir } = require('os')
-    const { readFileSync, existsSync } = require('fs')
+    const { readFileSync, writeFileSync, existsSync } = require('fs')
 
     const timestamp = Date.now()
     const screenshotPath = join(tmpdir(), `clui-screenshot-${timestamp}.png`)
+
+    if (process.platform === 'win32') {
+      // Windows: capture the full screen via Electron's desktopCapturer.
+      // Picks the display under the cursor (or the primary if none).
+      const cursor = screen.getCursorScreenPoint()
+      const display = screen.getDisplayNearestPoint(cursor) || screen.getPrimaryDisplay()
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: Math.round(display.size.width * display.scaleFactor),
+          height: Math.round(display.size.height * display.scaleFactor),
+        },
+      })
+      // Match by display id when available; fall back to first source.
+      const target =
+        sources.find((s) => String((s as any).display_id) === String(display.id)) || sources[0]
+      if (!target) return null
+      const png = target.thumbnail.toPNG()
+      writeFileSync(screenshotPath, png)
+      return {
+        id: crypto.randomUUID(),
+        type: 'image',
+        name: `screenshot ${++screenshotCounter}.png`,
+        path: screenshotPath,
+        mimeType: 'image/png',
+        dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+        size: png.length,
+      }
+    }
 
     execSync(`/usr/sbin/screencapture -i "${screenshotPath}"`, {
       timeout: 30000,
@@ -2170,7 +2336,8 @@ ipcMain.handle(IPC.OPEN_IN_TERMINAL, async (_event, arg: string | null | { sessi
   }
 
   const terminal = await findInstalledTerminal(terminalId)
-  const logLabel = terminal ? terminal.label : terminalId && terminalId !== 'auto' ? `macOS default (fallback from ${terminalId})` : 'macOS default'
+  const sysDefault = process.platform === 'win32' ? 'Windows Terminal' : 'macOS default'
+  const logLabel = terminal ? terminal.label : terminalId && terminalId !== 'auto' ? `${sysDefault} (fallback from ${terminalId})` : sysDefault
 
   try {
     if (terminal) {
@@ -2253,6 +2420,41 @@ app.whenReady().then(async () => {
     app.dock.hide()
   }
 
+  // Windows: setting the AppUserModelId is required for the tray icon, notifications,
+  // and JumpList to associate with the correct app identity (matches build.appId).
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.clui.app')
+    try {
+      app.setJumpList([
+        {
+          type: 'tasks',
+          items: [
+            {
+              type: 'task',
+              title: 'Toggle Clui',
+              program: process.execPath,
+              args: '--toggle',
+              iconPath: process.execPath,
+              iconIndex: 0,
+              description: 'Show or hide the Clui overlay',
+            },
+            {
+              type: 'task',
+              title: 'New session',
+              program: process.execPath,
+              args: '--new',
+              iconPath: process.execPath,
+              iconIndex: 0,
+              description: 'Start a new Claude session',
+            },
+          ],
+        },
+      ])
+    } catch (err) {
+      log(`[jumplist] failed to set: ${(err as Error).message}`)
+    }
+  }
+
   // Register custom protocol for serving local file thumbnails to the renderer.
   // Usage: <img src="clui-local:///path/to/image.png" />
   protocol.handle('clui-local', (request) => {
@@ -2303,17 +2505,35 @@ app.whenReady().then(async () => {
   }
 
 
-  // Primary: Option+Space (2 keys, doesn't conflict with shell)
-  // Fallback: Cmd+Shift+K kept as secondary shortcut
-  const registered = globalShortcut.register('Alt+Space', () => toggleWindow('shortcut Alt+Space'))
+  // Primary: Option+Space on macOS (doesn't conflict with shell, system, or Anthropic's Claude Desktop).
+  // On Windows, Alt+Space is the system title-bar menu and Ctrl+Alt+Space is Claude Desktop's default;
+  // Ctrl+Alt+C avoids both and is semantic ("C for Clui").
+  // Fallback: Cmd/Ctrl+Shift+K as secondary shortcut, also a global toggle.
+  const primaryShortcut = process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+C'
+  const registered = globalShortcut.register(primaryShortcut, () => toggleWindow(`shortcut ${primaryShortcut}`))
   if (!registered) {
-    log('Alt+Space shortcut registration failed — macOS input sources may claim it')
+    log(`${primaryShortcut} shortcut registration failed — another app may claim it`)
   }
   globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
 
-  const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
+  // Per-tab summon shortcuts: Ctrl+Alt+1 .. Ctrl+Alt+9 (Cmd+Alt+1..9 on macOS).
+  // Brings the pill forward AND switches to tab N (1-indexed). If tab N doesn't
+  // exist, the renderer ignores the index. This lets you keep multiple agents in
+  // different directories and jump straight to a specific one.
+  for (let i = 1; i <= 9; i++) {
+    const accelerator =
+      process.platform === 'darwin' ? `Command+Alt+${i}` : `Control+Alt+${i}`
+    globalShortcut.register(accelerator, () => {
+      showWindow(`shortcut ${accelerator}`)
+      broadcast(IPC.ACTIVATE_TAB_BY_INDEX, i - 1)
+    })
+  }
+
+  // Windows uses a multi-res .ico; macOS uses a template PNG that auto-inverts for menu bar.
+  const trayIconFile = process.platform === 'win32' ? 'tray.ico' : 'trayTemplate.png'
+  const trayIconPath = join(__dirname, '../../resources', trayIconFile)
   const trayIcon = nativeImage.createFromPath(trayIconPath)
-  trayIcon.setTemplateImage(true)
+  if (process.platform === 'darwin') trayIcon.setTemplateImage(true)
   tray = new Tray(trayIcon)
   tray.setToolTip('Clui — Claude Code UI')
   tray.on('click', () => toggleWindow('tray click'))

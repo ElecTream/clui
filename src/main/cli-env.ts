@@ -1,4 +1,5 @@
 import { execSync } from 'child_process'
+import { getCliPathWin } from './platform/win-process'
 
 let cachedPath: string | null = null
 
@@ -14,6 +15,11 @@ function appendPathEntries(target: string[], seen: Set<string>, rawPath: string 
 
 export function getCliPath(): string {
   if (cachedPath) return cachedPath
+
+  if (process.platform === 'win32') {
+    cachedPath = getCliPathWin()
+    return cachedPath
+  }
 
   const ordered: string[] = []
   const seen = new Set<string>()

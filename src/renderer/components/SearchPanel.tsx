@@ -4,6 +4,7 @@ import { MagnifyingGlass, SpinnerGap, X, Clock, FolderSimple, ArrowRight } from 
 import { useSessionStore } from '../stores/sessionStore'
 import { useColors } from '../theme'
 import { shortPath, timeAgo } from '../utils/format'
+import { shortcut } from '../utils/shortcuts'
 import type { SearchResult } from '../../shared/types'
 
 /** Confidence label from score. */
@@ -424,7 +425,7 @@ export function SearchPanel() {
               fontSize: 10, color: colors.textTertiary, opacity: 0.5,
               fontFamily: 'monospace', marginTop: 2,
             }}>
-              Cmd+Shift+F
+              {shortcut('Shift', 'F')}
             </span>
           </div>
         )}

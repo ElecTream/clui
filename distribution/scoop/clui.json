@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
+  "version": "0.2.0",
+  "description": "Transparent floating overlay UI for Claude Code on Windows.",
+  "homepage": "https://github.com/<YOUR_GITHUB_HANDLE>/clui",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/<YOUR_GITHUB_HANDLE>/clui/releases/download/v0.2.0-win.0/Clui-0.2.0-win.0-portable.exe#/clui.exe",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "shortcuts": [["clui.exe", "Clui"]],
+  "checkver": {
+    "github": "https://github.com/<YOUR_GITHUB_HANDLE>/clui",
+    "regex": "v([\\d.]+)-win\\.\\d+"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/<YOUR_GITHUB_HANDLE>/clui/releases/download/v$version-win.0/Clui-$version-win.0-portable.exe#/clui.exe"
+      }
+    }
+  },
+  "notes": [
+    "Clui runs as a tray-resident background app.",
+    "Toggle the overlay with Ctrl + Alt + C.",
+    "Right-click the tray icon to quit."
+  ]
+}
