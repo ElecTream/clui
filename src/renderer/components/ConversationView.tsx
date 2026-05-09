@@ -17,6 +17,8 @@ import {
 import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
+import { MemoryCard } from './MemoryCard'
+import { CompactConfirmCard } from './CompactConfirmCard'
 import { getFileIcon } from './FileMentionMenu'
 import { useColors, useThemeStore } from '../theme'
 import { SUMMON_SHORTCUT } from '../utils/shortcuts'
@@ -1232,6 +1234,9 @@ const COST_PREFIX = '__COST_DATA__'
 const TODO_PREFIX = '__TODO_DATA__'
 const COMPACTION_PREFIX = '__COMPACTION_DATA__'
 const LOCAL_COMMAND_PREFIX = '__LOCAL_COMMAND_DATA__'
+// Phase C — native slash command UIs
+const MEMORY_PREFIX = '__MEMORY_DATA__'
+const COMPACT_CONFIRM_PREFIX = '__COMPACT_CONFIRM__'
 
 function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
   const colors = useColors()
@@ -1257,6 +1262,36 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
     try {
       const parsed = JSON.parse(message.content.slice(COMPACTION_PREFIX.length))
       const inner = <CompactionCard data={parsed} colors={colors} />
+      if (skipMotion) return <div className="py-1">{inner}</div>
+      return (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="py-1">
+          {inner}
+        </motion.div>
+      )
+    } catch {}
+  }
+
+  // Phase C — Memory card (/memory)
+  const isMemory = message.content.startsWith(MEMORY_PREFIX)
+  if (isMemory) {
+    try {
+      const parsed = JSON.parse(message.content.slice(MEMORY_PREFIX.length))
+      const inner = <MemoryCard data={parsed} colors={colors} />
+      if (skipMotion) return <div className="py-1">{inner}</div>
+      return (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="py-1">
+          {inner}
+        </motion.div>
+      )
+    } catch {}
+  }
+
+  // Phase C — Compact confirm card (/compact)
+  const isCompactConfirm = message.content.startsWith(COMPACT_CONFIRM_PREFIX)
+  if (isCompactConfirm) {
+    try {
+      const parsed = JSON.parse(message.content.slice(COMPACT_CONFIRM_PREFIX.length))
+      const inner = <CompactConfirmCard data={parsed} colors={colors} />
       if (skipMotion) return <div className="py-1">{inner}</div>
       return (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="py-1">

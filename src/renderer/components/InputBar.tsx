@@ -463,6 +463,47 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
         clearTab()
         addSystemMessage('Conversation cleared.')
         break
+      case '/memory': {
+        // Phase C — native /memory card. Loads ~/.claude/CLAUDE.md (global)
+        // + <cwd>/CLAUDE.md (project) via the Phase B bridge. The card
+        // (rendered from the __MEMORY_DATA__ sentinel) presents both with
+        // tabs and lets the user edit + save.
+        const cwd = tab?.workingDirectory || ''
+        Promise.all([
+          window.clui.readGlobalCLAUDEMd?.() ?? Promise.resolve(''),
+          cwd ? (window.clui.readProjectCLAUDEMd?.(cwd) ?? Promise.resolve('')) : Promise.resolve(''),
+        ])
+          .then(([globalContent, projectContent]) => {
+            const data = JSON.stringify({
+              global: globalContent || '',
+              project: projectContent || '',
+              projectPath: cwd,
+            })
+            addSystemMessage(`__MEMORY_DATA__${data}`)
+          })
+          .catch(() => {
+            addSystemMessage('Memory bridge not available — settings.json/CLAUDE.md parity requires Phase B (commit ba776e0+).')
+          })
+        break
+      }
+      case '/compact': {
+        // Phase C — native /compact card. Shows token / context usage with
+        // a "Compact now" button. We DON'T compact here — when the user
+        // confirms, the card sends "/compact" through the normal message
+        // channel which the CLI handles.
+        const lastResult = tab?.lastResult
+        const data = JSON.stringify({
+          inputTokens: lastResult?.usage.input_tokens ?? 0,
+          outputTokens: lastResult?.usage.output_tokens ?? 0,
+          cacheRead: lastResult?.usage.cache_read_input_tokens ?? 0,
+          cacheCreate: lastResult?.usage.cache_creation_input_tokens ?? 0,
+          totalCostUsd: lastResult?.totalCostUsd ?? null,
+          turns: lastResult?.numTurns ?? 0,
+          hasData: !!lastResult,
+        })
+        addSystemMessage(`__COMPACT_CONFIRM__${data}`)
+        break
+      }
       case '/cost': {
         if (tab?.lastResult) {
           const r = tab.lastResult

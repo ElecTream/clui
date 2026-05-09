@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
-  Trash, Cpu, CurrencyDollar, Question, HardDrives, Sparkle, Info, ChatDots, Archive,
+  Trash, Cpu, CurrencyDollar, Question, HardDrives, Sparkle, Info, ChatDots, Archive, BookOpen,
 } from '@phosphor-icons/react'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors } from '../theme'
@@ -17,6 +17,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/clear', description: 'Clear conversation history', icon: <Trash size={13} /> },
   { command: '/compact', description: 'Compact the current conversation', icon: <Archive size={13} /> },
   { command: '/cost', description: 'Show token usage and cost', icon: <CurrencyDollar size={13} /> },
+  { command: '/memory', description: 'View and edit CLAUDE.md (global + project)', icon: <BookOpen size={13} /> },
   { command: '/model', description: 'Show current model info', icon: <Cpu size={13} /> },
   { command: '/mcp', description: 'Show MCP server status', icon: <HardDrives size={13} /> },
   { command: '/skills', description: 'Show available skills', icon: <Sparkle size={13} /> },
