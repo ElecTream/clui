@@ -13,7 +13,6 @@ import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useSearchEvents } from './hooks/useSearchEvents'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { useWindowDrag } from './hooks/useWindowDrag'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore, spacing } from './theme'
 import { IS_WIN } from './utils/shortcuts'
@@ -107,39 +106,11 @@ export default function App() {
     })
   }, [])
 
-  // OS-level click-through (RAF-throttled to avoid per-pixel IPC)
-  useEffect(() => {
-    if (!window.clui?.setIgnoreMouseEvents) return
-    let lastIgnored: boolean | null = null
-
-    const onMouseMove = (e: MouseEvent) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY)
-      const isUI = !!(el && el.closest('[data-clui-ui]'))
-      const shouldIgnore = !isUI
-      if (shouldIgnore !== lastIgnored) {
-        lastIgnored = shouldIgnore
-        if (shouldIgnore) {
-          window.clui.setIgnoreMouseEvents(true, { forward: true })
-        } else {
-          window.clui.setIgnoreMouseEvents(false)
-        }
-      }
-    }
-
-    const onMouseLeave = () => {
-      if (lastIgnored !== true) {
-        lastIgnored = true
-        window.clui.setIgnoreMouseEvents(true, { forward: true })
-      }
-    }
-
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseleave', onMouseLeave)
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseleave', onMouseLeave)
-    }
-  }, [])
+  // setIgnoreMouseEvents toggling is gone in stage 2e — the pill window
+  // is now sized to fit the visible chrome (740×160) instead of 1040×720,
+  // so there's no large transparent canvas around the UI that needs
+  // click-through. Native -webkit-app-region: drag handles dragging now;
+  // no per-mousemove IPC.
 
   const isExpanded = useSessionStore((s) => s.isExpanded)
   const marketplaceOpen = useSessionStore((s) => s.marketplaceOpen)
@@ -148,13 +119,11 @@ export default function App() {
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
   const inputBarRef = useRef<InputBarHandle>(null)
 
-  // Phase 0.2 — drag-from-anywhere on the pill. Two refs because the pill is
-  // visually two stacked surfaces (the conversation shell and the input row);
-  // both should be drag-active. Children opt out via data-clui-no-drag="true".
+  // Drag is handled natively by the OS via `-webkit-app-region: drag`
+  // in index.css; no per-mousemove IPC. The two refs are kept only for
+  // the JSX structure (and any future programmatic focus needs).
   const shellDragRef = useRef<HTMLDivElement>(null)
   const inputDragRef = useRef<HTMLDivElement>(null)
-  useWindowDrag(shellDragRef)
-  useWindowDrag(inputDragRef)
 
   // Layout dimensions — expandedUI widens and heightens the panel
   const contentWidth = expandedUI ? 700 : spacing.contentWidth

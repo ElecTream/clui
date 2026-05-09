@@ -439,9 +439,20 @@ export interface CatalogPlugin {
 // ─── Overlay Window Geometry Constants ───
 // Single source of truth shared between main and renderer to prevent snap/clamp drift.
 
-export const OVERLAY_BAR_WIDTH = 1040
-export const OVERLAY_PILL_HEIGHT = 720
-export const OVERLAY_PILL_BOTTOM_MARGIN = 24
+// Phase 0.1 stage 2e — pill window dimensions are now sized to fit the
+// visible chrome only. Previously the window was 1040×720 with the pill
+// at the bottom; the rest was a transparent canvas reserved for the old
+// in-pill conversation view (now lives in cards). That huge empty
+// canvas was responsible for: native -webkit-app-region drag failing
+// (transparent + setIgnoreMouseEvents quirks), DWM rendering a phantom
+// frame at the top, and tactile lag from the IPC drag fallback.
+//
+// Width: 460 content column + ~158 left circle stack + ~46 right hub
+// circle + ~10 gap on each side ≈ 720, with 10px shadow margin per side.
+// Height: ~50 toolbar + 70 input pill (60 + 10 buffer) + ~20 shadow ≈ 150.
+export const OVERLAY_BAR_WIDTH = 740
+export const OVERLAY_PILL_HEIGHT = 160
+export const OVERLAY_PILL_BOTTOM_MARGIN = 16
 
 // ─── IPC Channel Names ───
 

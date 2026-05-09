@@ -618,14 +618,14 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
-    // Enable OS-level click-through for transparent regions.
-    // { forward: true } ensures mousemove events still reach the renderer
-    // so it can toggle click-through off when cursor enters interactive UI.
-    mainWindow?.setIgnoreMouseEvents(true, { forward: true })
-    // DevTools opens only when CLUI_DEVTOOLS=1 in dev. The detached window has its
-    // own non-frameless OS chrome, which renders as a phantom title bar above the
-    // pill on Windows. Off by default; enable on demand for debugging:
-    //   $env:CLUI_DEVTOOLS = "1"; npm run dev
+    // setIgnoreMouseEvents is intentionally NOT enabled here anymore.
+    // Stage 2e shrunk the pill window to just the visible chrome (740×160)
+    // so there's no longer a giant transparent canvas around the UI that
+    // needed click-through. The only transparent areas now are the small
+    // rounded-corner clip-outs of the pill itself. Letting those capture
+    // clicks instead of passing them through is the price of getting
+    // native `-webkit-app-region: drag` to work — and it does work, with
+    // zero IPC and proper multi-monitor handling.
     if (process.env.ELECTRON_RENDERER_URL && process.env.CLUI_DEVTOOLS === '1') {
       mainWindow?.webContents.openDevTools({ mode: 'detach' })
     }
