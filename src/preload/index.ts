@@ -85,20 +85,8 @@ export interface CluiAPI {
   animateHeight(from: number, to: number, durationMs: number): Promise<void>
   hideWindow(): void
   isVisible(): Promise<boolean>
-  /** OS-level click-through for transparent window regions */
-  setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): void
-  /** Manual window drag for frameless windows (delta-based, legacy) */
-  startWindowDrag(deltaX: number, deltaY: number): void
-  /** Move the pill to absolute screen coords (preferred drag path) */
-  moveWindowTo(x: number, y: number): void
   /** Reset overlay to its default bottom-center position */
   resetWindowPosition(): void
-  /** Show the full-screen snap grid overlay window */
-  showSnapGrid(): void
-  /** Hide the snap grid overlay window */
-  hideSnapGrid(): void
-  /** Update which snap zone is highlighted in the grid */
-  updateSnapZone(zone: 'left' | 'center' | 'right'): void
 
   /** Phase 0.1 — toggle / show / hide the host window from the renderer. */
   toggleHostWindow(): void
@@ -205,15 +193,7 @@ const api: CluiAPI = {
     ipcRenderer.invoke(IPC.ANIMATE_HEIGHT, { from, to, durationMs }),
   hideWindow: () => ipcRenderer.send(IPC.HIDE_WINDOW),
   isVisible: () => ipcRenderer.invoke(IPC.IS_VISIBLE),
-  setIgnoreMouseEvents: (ignore, options) =>
-    ipcRenderer.send(IPC.SET_IGNORE_MOUSE_EVENTS, ignore, options || {}),
-  startWindowDrag: (deltaX, deltaY) =>
-    ipcRenderer.send(IPC.START_WINDOW_DRAG, deltaX, deltaY),
-  moveWindowTo: (x, y) => ipcRenderer.send(IPC.WINDOW_MOVE_TO, x, y),
   resetWindowPosition: () => ipcRenderer.send(IPC.RESET_WINDOW_POSITION),
-  showSnapGrid: () => ipcRenderer.send(IPC.SHOW_SNAP_GRID),
-  hideSnapGrid: () => ipcRenderer.send(IPC.HIDE_SNAP_GRID),
-  updateSnapZone: (zone) => ipcRenderer.send(IPC.UPDATE_SNAP_ZONE, zone),
   setWindowWidth: (width) => ipcRenderer.send(IPC.SET_WINDOW_WIDTH, width),
   toggleHostWindow: () => ipcRenderer.send(IPC.TOGGLE_HOST_WINDOW),
   showHostWindow: () => ipcRenderer.send(IPC.SHOW_HOST_WINDOW),

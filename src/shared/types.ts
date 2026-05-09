@@ -505,17 +505,7 @@ export const IPC = {
   HIDE_WINDOW: 'clui:hide-window',
   WINDOW_SHOWN: 'clui:window-shown',
   ACTIVATE_TAB_BY_INDEX: 'clui:activate-tab-by-index',
-  SET_IGNORE_MOUSE_EVENTS: 'clui:set-ignore-mouse-events',
-  /** Legacy delta-based pill drag. Kept until call sites migrate. */
-  START_WINDOW_DRAG: 'clui:start-window-drag',
-  /** Phase 0.1 stage 2d — move pill to an absolute screen-coord target.
-   *  Absolute eliminates delta drift and DPI-mismatch jumps when crossing
-   *  monitors that delta-based dragging produced. */
-  WINDOW_MOVE_TO: 'clui:window-move-to',
   RESET_WINDOW_POSITION: 'clui:reset-window-position',
-  SHOW_SNAP_GRID: 'clui:show-snap-grid',
-  HIDE_SNAP_GRID: 'clui:hide-snap-grid',
-  UPDATE_SNAP_ZONE: 'clui:update-snap-zone',
   IS_VISIBLE: 'clui:is-visible',
 
   // Skill provisioning (main → renderer)

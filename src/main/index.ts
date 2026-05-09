@@ -23,7 +23,6 @@ function log(msg: string): void {
 }
 
 let mainWindow: BrowserWindow | null = null
-let gridWindow: BrowserWindow | null = null
 // Phase 0.1 — host window. Holds Conversation/Settings/Marketplace/etc. as a
 // real solid rectangular surface so its shadow + edges don't alpha-bleed
 // across the pill's transparent canvas. Stays paired with the pill (same
@@ -35,112 +34,6 @@ let screenshotCounter = 0
 let toggleSequence = 0
 let forceQuit = false
 let lastWindowBounds: Electron.Rectangle | null = null
-
-// ─── Snap grid overlay HTML (embedded, no separate file needed) ───
-const SNAP_GRID_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100vw;height:100vh;overflow:hidden;background:transparent}
-.wrap{position:fixed;inset:0;opacity:0;transition:opacity 0.14s ease}
-.wrap.visible{opacity:1}
-.hud{position:absolute;inset:0;pointer-events:none}
-.zone-band{
-  position:absolute;top:0;bottom:0;left:0;width:0;
-  background:linear-gradient(90deg,rgba(255,255,255,0.10),rgba(255,255,255,0.06));
-  border-left:1px solid rgba(255,255,255,0.30);
-  border-right:1px solid rgba(255,255,255,0.30);
-  transition:left 0.11s ease,width 0.11s ease;
-}
-.line{
-  position:absolute;top:0;bottom:0;width:0;
-  border-left:1px dashed rgba(255,255,255,0.28);
-}
-.line.edge{border-left-style:solid;border-left-color:rgba(255,255,255,0.40)}
-.line.threshold{border-left-color:rgba(255,255,255,0.34)}
-.hline{
-  position:absolute;left:0;right:0;height:0;
-  border-top:1px dashed rgba(255,255,255,0.16);
-}
-.deadzone{
-  position:absolute;top:0;bottom:0;right:0;width:0;
-  background:linear-gradient(90deg,rgba(255,255,255,0.00),rgba(255,255,255,0.05));
-}
-</style></head><body>
-<div class="wrap" id="w">
-  <div class="hud">
-    <div class="zone-band" id="zoneBand"></div>
-    <div class="line edge" id="startLine"></div>
-    <div class="line threshold" id="firstThreshold"></div>
-    <div class="line threshold" id="secondThreshold"></div>
-    <div class="line edge" id="endLine"></div>
-    <div class="deadzone" id="deadzone"></div>
-    <div id="hl"></div>
-  </div>
-</div>
-<script>
-const w=document.getElementById('w');
-const band=document.getElementById('zoneBand');
-const startLine=document.getElementById('startLine');
-const firstThreshold=document.getElementById('firstThreshold');
-const secondThreshold=document.getElementById('secondThreshold');
-const endLine=document.getElementById('endLine');
-const deadzone=document.getElementById('deadzone');
-const hlc=document.getElementById('hl');
-const ROWS=6;
-let activeZone='center';
-let barWidth=1040;
-let travel=0;
-let first=0;
-let second=0;
-for(let i=1;i<ROWS;i++){
-  const d=document.createElement('div');
-  d.className='hline';
-  d.style.top=(100*i/ROWS)+'%';
-  hlc.appendChild(d);
-}
-function px(n){return Math.max(0,Math.round(n));}
-function layout(){
-  const width=window.innerWidth;
-  travel=Math.max(0,width-barWidth);
-  first=travel*0.25;
-  second=travel*0.75;
-  startLine.style.left='0px';
-  firstThreshold.style.left=px(first)+'px';
-  secondThreshold.style.left=px(second)+'px';
-  endLine.style.left=px(travel)+'px';
-  deadzone.style.width=px(width-travel)+'px';
-}
-function renderZone(){
-  if(activeZone==='left'){
-    band.style.left='0px';
-    band.style.width=px(first)+'px';
-    return;
-  }
-  if(activeZone==='right'){
-    band.style.left=px(second)+'px';
-    band.style.width=px(travel-second)+'px';
-    return;
-  }
-  band.style.left=px(first)+'px';
-  band.style.width=px(second-first)+'px';
-}
-window.setSnapLayout=function(nextBarWidth){
-  if(Number.isFinite(nextBarWidth)){
-    barWidth=Math.max(0,Number(nextBarWidth));
-  }
-  layout();
-  renderZone();
-};
-window.setSnapZone=function(zone){
-  if(zone==='left'||zone==='center'||zone==='right'){
-    activeZone=zone;
-    renderZone();
-  }
-};
-window.addEventListener('resize',()=>{layout();renderZone();});
-layout();
-renderZone();
-requestAnimationFrame(()=>w.classList.add('visible'));
-</script></body></html>`
 
 // Feature flag: enable PTY interactive permissions transport
 const INTERACTIVE_PTY = process.env.CLUI_INTERACTIVE_PERMISSIONS_PTY === '1'
@@ -802,15 +695,6 @@ ipcMain.handle(IPC.IS_VISIBLE, () => {
   return mainWindow?.isVisible() ?? false
 })
 
-// OS-level click-through toggle — renderer calls this on mousemove
-// to enable clicks on interactive UI while passing through transparent areas
-ipcMain.on(IPC.SET_IGNORE_MOUSE_EVENTS, (event, ignore: boolean, options?: { forward?: boolean }) => {
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (win && !win.isDestroyed()) {
-    win.setIgnoreMouseEvents(ignore, options || {})
-  }
-})
-
 function getOverlayDisplay(): Electron.Display {
   if (mainWindow && !mainWindow.isDestroyed()) {
     return screen.getDisplayMatching(mainWindow.getBounds())
@@ -819,159 +703,8 @@ function getOverlayDisplay(): Electron.Display {
   return screen.getDisplayNearestPoint(cursor)
 }
 
-function applySnapGridLayout(): void {
-  if (!gridWindow || gridWindow.isDestroyed()) return
-  gridWindow.webContents
-    .executeJavaScript(`window.setSnapLayout && window.setSnapLayout(${BAR_WIDTH})`)
-    .catch(() => {})
-}
-
-function syncSnapGridToOverlayDisplay(): void {
-  if (!gridWindow || gridWindow.isDestroyed()) return
-  const { workArea } = getOverlayDisplay()
-  const current = gridWindow.getBounds()
-  if (
-    current.x !== workArea.x ||
-    current.y !== workArea.y ||
-    current.width !== workArea.width ||
-    current.height !== workArea.height
-  ) {
-    gridWindow.setBounds(workArea)
-    applySnapGridLayout()
-  }
-}
-
-// Manual window drag — works reliably with frameless + setIgnoreMouseEvents
-ipcMain.on(IPC.START_WINDOW_DRAG, (event, deltaX: number, deltaY: number) => {
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (win && !win.isDestroyed()) {
-    const current = win.getBounds()
-    const proposed = {
-      x: Math.round(current.x + deltaX),
-      y: Math.round(current.y + deltaY),
-      width: current.width,
-      height: current.height,
-    }
-    // Compute a permissive bound across ALL displays so the pill can roam
-    // freely. Old behavior clamped to a single display's work area, which
-    // made the pill feel "locked to a region" when crossing monitors. We
-    // keep a small on-screen margin so the user can't lose the pill by
-    // dragging it fully past every monitor.
-    const ON_SCREEN_MARGIN = 60
-    const displays = screen.getAllDisplays()
-    let unionLeft = Infinity, unionTop = Infinity, unionRight = -Infinity, unionBottom = -Infinity
-    for (const d of displays) {
-      const wa = d.workArea
-      if (wa.x < unionLeft) unionLeft = wa.x
-      if (wa.y < unionTop) unionTop = wa.y
-      if (wa.x + wa.width > unionRight) unionRight = wa.x + wa.width
-      if (wa.y + wa.height > unionBottom) unionBottom = wa.y + wa.height
-    }
-    const nextX = Math.max(unionLeft - current.width + ON_SCREEN_MARGIN, Math.min(proposed.x, unionRight - ON_SCREEN_MARGIN))
-    const nextY = Math.max(unionTop, Math.min(proposed.y, unionBottom - ON_SCREEN_MARGIN))
-    win.setPosition(nextX, nextY)
-    lastWindowBounds = win.getBounds()
-    if (gridWindow && !gridWindow.isDestroyed() && gridWindow.isVisible()) {
-      syncSnapGridToOverlayDisplay()
-    }
-  }
-})
-
-/**
- * Absolute-position drag (pointer-event based). Renderer computes the
- * target window position from screen-coordinate cursor deltas and sends
- * a single absolute (x, y). Main clamps to the union of all displays
- * with a small on-screen margin so the pill can roam multi-monitor but
- * can't be lost. No accumulation, no DPI-mismatch jump on monitor cross.
- */
-ipcMain.on(IPC.WINDOW_MOVE_TO, (event, x: number, y: number) => {
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win || win.isDestroyed()) return
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return
-  const current = win.getBounds()
-
-  const ON_SCREEN_MARGIN = 60
-  const displays = screen.getAllDisplays()
-  let unionLeft = Infinity, unionTop = Infinity, unionRight = -Infinity, unionBottom = -Infinity
-  for (const d of displays) {
-    const wa = d.workArea
-    if (wa.x < unionLeft) unionLeft = wa.x
-    if (wa.y < unionTop) unionTop = wa.y
-    if (wa.x + wa.width > unionRight) unionRight = wa.x + wa.width
-    if (wa.y + wa.height > unionBottom) unionBottom = wa.y + wa.height
-  }
-  // Allow the window to mostly leave a screen edge but keep ON_SCREEN_MARGIN
-  // visible so the user can always grab it back.
-  const minX = unionLeft - current.width + ON_SCREEN_MARGIN
-  const maxX = unionRight - ON_SCREEN_MARGIN
-  const minY = unionTop
-  const maxY = unionBottom - ON_SCREEN_MARGIN
-  const nextX = Math.round(Math.max(minX, Math.min(x, maxX)))
-  const nextY = Math.round(Math.max(minY, Math.min(y, maxY)))
-
-  win.setPosition(nextX, nextY)
-  if (win === mainWindow) lastWindowBounds = win.getBounds()
-})
-
 ipcMain.on(IPC.RESET_WINDOW_POSITION, () => {
   resetWindowPosition()
-})
-
-// ─── Snap grid overlay window ───
-
-function getOrCreateGridWindow(): BrowserWindow {
-  if (gridWindow && !gridWindow.isDestroyed()) return gridWindow
-
-  const { workArea } = getOverlayDisplay()
-
-  gridWindow = new BrowserWindow({
-    x: workArea.x,
-    y: workArea.y,
-    width: workArea.width,
-    height: workArea.height,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
-    focusable: false,
-    show: false,
-    paintWhenInitiallyHidden: false,
-    ...(process.platform === 'win32' ? { thickFrame: false } : {}),
-    backgroundColor: '#00000000',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
-  gridWindow.setIgnoreMouseEvents(true)
-  gridWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  gridWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(SNAP_GRID_HTML)}`)
-  gridWindow.webContents.on('did-finish-load', () => {
-    applySnapGridLayout()
-  })
-  return gridWindow
-}
-
-ipcMain.on(IPC.SHOW_SNAP_GRID, () => {
-  const win = getOrCreateGridWindow()
-  syncSnapGridToOverlayDisplay()
-  applySnapGridLayout()
-  win.show()
-})
-
-ipcMain.on(IPC.HIDE_SNAP_GRID, () => {
-  if (gridWindow && !gridWindow.isDestroyed()) {
-    gridWindow.hide()
-  }
-})
-
-ipcMain.on(IPC.UPDATE_SNAP_ZONE, (_, zone: 'left' | 'center' | 'right') => {
-  if (gridWindow && !gridWindow.isDestroyed() && gridWindow.isVisible()) {
-    gridWindow.webContents
-      .executeJavaScript(`window.setSnapZone && window.setSnapZone(${JSON.stringify(zone)})`)
-      .catch(() => {})
-  }
 })
 
 // ─── Host window (Phase 0.1) ───
