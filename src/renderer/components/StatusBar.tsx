@@ -9,7 +9,7 @@ import type { PreferredTerminalId, TerminalInstallation } from '../../shared/typ
 
 /* ─── Model Picker (inline — tightly coupled to StatusBar) ─── */
 
-function ModelPicker() {
+export function ModelPicker() {
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
   const availableModels = useSessionStore((s) => s.availableModels)
@@ -151,7 +151,7 @@ function ModelPicker() {
 
 /* ─── Permission Mode Picker (global — affects all tabs) ─── */
 
-function PermissionModePicker() {
+export function PermissionModePicker() {
   const permissionMode = useSessionStore((s) => s.permissionMode)
   const setPermissionMode = useSessionStore((s) => s.setPermissionMode)
   const popoverLayer = usePopoverLayer()
@@ -269,7 +269,7 @@ function PermissionModePicker() {
   )
 }
 
-function TerminalLaunchControl({
+export function TerminalLaunchControl({
   sessionId,
   projectPath,
 }: {

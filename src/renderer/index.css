@@ -31,31 +31,26 @@ html[data-clui-window='host'] #root {
   background: var(--clui-container-bg, #0f0f0f);
 }
 
-/* ─── Native window drag (drag-from-anywhere) ───
+/* ─── Native window drag (host window only) ───
  *
- * `-webkit-app-region: drag` is hardware-accelerated by the OS — no IPC
- * round-trip per mousemove, no setBounds() lag. Mark a drag surface with
- * data-clui-drag="true"; mark explicit interactive children with
- * data-clui-no-drag="true" to opt them out. Common interactive tags also
- * get no-drag automatically as a belt-and-suspenders default — without
- * this the OS would intercept clicks on buttons and start dragging the
- * window instead.
- *
- * Applies to both pill and host. Pill works *despite* transparent +
- * setIgnoreMouseEvents because the drag region is only marked on
- * hit-testable interactive surfaces, not the transparent canvas around
- * them; click-through still works for the truly empty regions.
+ * `-webkit-app-region: drag` is hardware-accelerated by the OS, but on
+ * the pill window — `transparent: true` + `setIgnoreMouseEvents` + per-
+ * element click-through — the OS hit-test is unreliable: native drag
+ * either doesn't fire at all or intercepts mousedown before the existing
+ * IPC drag (useWindowDrag) can start. So the pill stays on the IPC path
+ * and we scope this rule to the host, where the window is a solid
+ * rectangle and native drag is the right answer.
  */
-[data-clui-drag='true'] {
+html[data-clui-window='host'] [data-clui-drag='true'] {
   -webkit-app-region: drag;
 }
-[data-clui-drag='true'] [data-clui-no-drag='true'],
-[data-clui-drag='true'] button,
-[data-clui-drag='true'] input,
-[data-clui-drag='true'] textarea,
-[data-clui-drag='true'] select,
-[data-clui-drag='true'] a,
-[data-clui-drag='true'] [contenteditable='true'] {
+html[data-clui-window='host'] [data-clui-drag='true'] [data-clui-no-drag='true'],
+html[data-clui-window='host'] [data-clui-drag='true'] button,
+html[data-clui-window='host'] [data-clui-drag='true'] input,
+html[data-clui-window='host'] [data-clui-drag='true'] textarea,
+html[data-clui-window='host'] [data-clui-drag='true'] select,
+html[data-clui-window='host'] [data-clui-drag='true'] a,
+html[data-clui-window='host'] [data-clui-drag='true'] [contenteditable='true'] {
   -webkit-app-region: no-drag;
 }
 
@@ -330,6 +325,20 @@ input::placeholder {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+}
+
+/* Mirror of .circles-out for action buttons that float to the RIGHT of
+ * the input pill. Used by the hub-toggle button (Phase 0.1 stage 2c) so
+ * the deck/hub control is reachable without crowding the in-pill control
+ * row. Same vertical alignment as the left-side circles. */
+.circles-out-right {
+  position: absolute;
+  left: calc(100% + 10px);
+  bottom: 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .btn-stack {

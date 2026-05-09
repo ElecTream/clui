@@ -1,42 +1,23 @@
-import React, { useEffect, useState } from 'react'
-import { Plus, Minus, ArrowsClockwise, Stack } from '@phosphor-icons/react'
+import React from 'react'
+import { ArrowsClockwise } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
-import { HistoryPicker } from './HistoryPicker'
-import { SettingsPopover } from './SettingsPopover'
-import { SwitcherChip } from './TabSwitcher'
+import { ActiveTabChip } from './TabSwitcher'
+import { ModelPicker, PermissionModePicker, TerminalLaunchControl } from './StatusBar'
 import { useColors, useThemeStore } from '../theme'
 
 /**
- * Deck button — toggles the host window. Single source of truth for the
- * host's open/closed state lives in main process; this button just sends
- * an IPC and listens for the broadcast back. data-active drives the
- * accent-color styling when host is open.
+ * Pill toolbar — the always-visible row above the input pill.
+ *
+ * Per the user's spec: pill carries only the four controls they reach
+ * for during a chat. Everything else (history, marketplace, settings,
+ * directory picker, "+ new chat") moves to the hub.
+ *
+ *   [active-tab indicator] [model] [mode] [open-in-cli] [optional update]
+ *
+ * The hub-toggle button is rendered separately as a floating circle on
+ * the right side of the input pill (mirroring the screenshot/attach
+ * circles on the left), not inside this row.
  */
-function DeckButton() {
-  const colors = useColors()
-  const [hostVisible, setHostVisible] = useState(false)
-
-  useEffect(() => {
-    // Seed from current state — covers the case where the host was
-    // restored on pill summon before the renderer mounted.
-    window.clui.getHostVisibility().then(setHostVisible).catch(() => {})
-    const off = window.clui.onHostWindowVisibility((v) => setHostVisible(v))
-    return off
-  }, [])
-
-  return (
-    <button
-      data-clui-no-drag="true"
-      onClick={() => window.clui.toggleHostWindow()}
-      className="clui-icon-btn"
-      data-active={hostVisible ? 'true' : 'false'}
-      style={{ color: hostVisible ? colors.accent : undefined }}
-      title={hostVisible ? 'Close hub' : 'Open hub'}
-    >
-      <Stack size={16} />
-    </button>
-  )
-}
 
 function UpdateButton() {
   const colors = useColors()
@@ -60,60 +41,57 @@ function UpdateButton() {
 }
 
 export function TabStrip() {
-  const isExpanded = useSessionStore((s) => s.isExpanded)
-  const createTab = useSessionStore((s) => s.createTab)
-  const toggleExpanded = useSessionStore((s) => s.toggleExpanded)
+  const colors = useColors()
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
 
   return (
     <div
       data-clui-ui
       className="flex items-center no-drag"
       style={{
-        // Phase 0.0 spacing scale — was '8px 0' literal.
-        padding: 'var(--clui-space-2) 0',
-        gap: 'var(--clui-space-2)',
-        paddingLeft: 'var(--clui-space-2)',
-        paddingRight: 'var(--clui-space-2)',
+        padding: 'var(--clui-space-2) var(--clui-space-3)',
+        gap: 'var(--clui-space-3)',
+        // Subtle separator from the input pill below; the surface contrast
+        // does the rest of the work (per Phase 0.0 design language).
+        borderBottom: `1px solid ${colors.containerBorder}`,
       }}
     >
-      {/* Active-tab chip + popover switcher — replaces the old horizontal
-          tab-pill row. Stage 2b. */}
-      <div className="flex-1 min-w-0 flex items-center" style={{ paddingLeft: 'var(--clui-space-1)' }}>
-        <SwitcherChip />
+      <ActiveTabChip />
+
+      <div
+        style={{
+          height: 18,
+          width: 1,
+          background: colors.containerBorder,
+          flexShrink: 0,
+        }}
+      />
+
+      <div
+        className="flex items-center min-w-0"
+        style={{
+          gap: 'var(--clui-space-3)',
+          fontSize: 11,
+          color: colors.textTertiary,
+          flex: 1,
+        }}
+      >
+        <ModelPicker />
+        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+        <PermissionModePicker />
       </div>
 
-      {/* Pinned action buttons */}
       <div
         className="flex items-center flex-shrink-0"
-        style={{ gap: 'var(--clui-space-1)' }}
+        style={{ gap: 'var(--clui-space-2)' }}
       >
-        <button
-          onClick={() => createTab()}
-          data-clui-no-drag="true"
-          className="clui-icon-btn"
-          title="New chat"
-        >
-          <Plus size={16} />
-        </button>
-
-        <HistoryPicker />
-
-        <DeckButton />
-
-        <SettingsPopover />
-
-        <UpdateButton />
-
-        {isExpanded && (
-          <button
-            onClick={() => toggleExpanded()}
-            data-clui-no-drag="true"
-            className="clui-icon-btn"
-            title="Minimize"
-          >
-            <Minus size={16} />
-          </button>
+        {tab && (
+          <TerminalLaunchControl
+            sessionId={tab.claudeSessionId}
+            projectPath={tab.workingDirectory}
+          />
         )}
+        <UpdateButton />
       </div>
     </div>
   )

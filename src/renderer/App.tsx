@@ -1,10 +1,8 @@
-import React, { useEffect, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Paperclip, Camera, HeadCircuit } from '@phosphor-icons/react'
+import { Paperclip, Camera, HeadCircuit, Stack } from '@phosphor-icons/react'
 import { TabStrip } from './components/TabStrip'
-import { ConversationView } from './components/ConversationView'
 import { InputBar, type InputBarHandle } from './components/InputBar'
-import { StatusBar } from './components/StatusBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { SearchPanel } from './components/SearchPanel'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -21,6 +19,36 @@ import { useColors, useThemeStore, spacing } from './theme'
 import { IS_WIN } from './utils/shortcuts'
 
 const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
+
+/**
+ * Hub-toggle circle that floats to the right of the input pill,
+ * mirroring the screenshot / attach / skills circles on the left. Same
+ * visual language as the left stack so they read as a pair flanking
+ * the input. Active styling (accent color + filled bg) when the hub is
+ * open.
+ */
+function HubCircleButton() {
+  const colors = useColors()
+  const [hostVisible, setHostVisible] = useState(false)
+
+  useEffect(() => {
+    window.clui.getHostVisibility().then(setHostVisible).catch(() => {})
+    const off = window.clui.onHostWindowVisibility((v) => setHostVisible(v))
+    return off
+  }, [])
+
+  return (
+    <button
+      className="stack-btn glass-surface"
+      data-clui-no-drag="true"
+      title={hostVisible ? 'Close hub' : 'Open hub'}
+      onClick={() => window.clui.toggleHostWindow()}
+      style={hostVisible ? { color: colors.accent } : undefined}
+    >
+      <Stack size={17} />
+    </button>
+  )
+}
 
 export default function App() {
   useClaudeEvents()
@@ -274,53 +302,34 @@ export default function App() {
             This always remains the chat shell. The marketplace is a separate
             panel rendered above it, never inside it.
           */}
+          {/*
+            Pill toolbar shell — fixed-size, no expand/minimize. The
+            ConversationView used to live in this shell behind an
+            expandedUI flag; with cards-as-windows (stage 3) coming, the
+            conversation lives in its own card window. The pill is now
+            just the always-visible control row + input below.
+          */}
           <motion.div
             ref={shellDragRef as unknown as React.Ref<HTMLDivElement>}
             data-clui-ui
             data-clui-drag="true"
             className="overflow-hidden flex flex-col no-drag"
-            animate={{
-              width: isExpanded ? cardExpandedWidth : cardCollapsedWidth,
-              marginBottom: isExpanded ? 10 : -14,
-              marginLeft: isExpanded ? 0 : cardCollapsedMargin,
-              marginRight: isExpanded ? 0 : cardCollapsedMargin,
-              background: isExpanded ? colors.containerBg : colors.containerBgCollapsed,
-              borderColor: colors.containerBorder,
-              boxShadow: isExpanded ? colors.cardShadow : colors.cardShadowCollapsed,
-            }}
-            transition={TRANSITION}
             style={{
+              width: cardCollapsedWidth,
+              marginBottom: -14,
+              marginLeft: cardCollapsedMargin,
+              marginRight: cardCollapsedMargin,
+              background: colors.containerBgCollapsed,
+              borderColor: colors.containerBorder,
+              boxShadow: colors.cardShadowCollapsed,
               borderWidth: 1,
               borderStyle: 'solid',
               borderRadius: 20,
               position: 'relative',
-              zIndex: isExpanded ? 20 : 10,
+              zIndex: 10,
             }}
           >
-            {/* Tab strip */}
-            <div>
-              <TabStrip />
-            </div>
-
-            {/* Body — chat history only; the marketplace is a separate overlay above.
-                Marked no-drag so users can select message text + use scroll/buttons
-                without accidentally moving the window. The pill chrome around it
-                (tab strip, input bar) stays drag-active. */}
-            <motion.div
-              data-clui-no-drag="true"
-              initial={false}
-              animate={{
-                height: isExpanded ? 'auto' : 0,
-                opacity: isExpanded ? 1 : 0,
-              }}
-              transition={TRANSITION}
-              className="overflow-hidden no-drag"
-            >
-              <div style={{ maxHeight: bodyMaxHeight }}>
-                <ConversationView />
-                <StatusBar />
-              </div>
-            </motion.div>
+            <TabStrip />
           </motion.div>
 
           {/* ─── BTW side question bubble ─── */}
@@ -364,6 +373,13 @@ export default function App() {
                   <HeadCircuit size={17} />
                 </button>
               </div>
+            </div>
+
+            {/* Hub-toggle floating circle on the RIGHT — mirrors the
+                screenshot/attach/skills circles on the left. Lives outside
+                the input pill so the pill chrome stays uncluttered. */}
+            <div data-clui-ui className="circles-out-right">
+              <HubCircleButton />
             </div>
 
             {/* Input pill — chrome around the InputBar is drag-active. The
