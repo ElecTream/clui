@@ -1026,6 +1026,50 @@ ipcMain.handle(IPC.LIST_MODELS, async () => {
   return discoverModels()
 })
 
+// Phase B — settings + CLAUDE.md bridge. clui treats ~/.claude/settings.json
+// and ~/.claude/CLAUDE.md as canonical: edits in either app round-trip, and
+// external changes (the CLI editing settings, the user editing CLAUDE.md in
+// VS Code) are picked up via fs.watch and broadcast to all windows.
+ipcMain.handle(IPC.READ_CLAUDE_SETTINGS, async () => {
+  const { readClaudeSettings } = await import('./claude/settings-bridge.js')
+  return readClaudeSettings()
+})
+
+ipcMain.handle(IPC.WRITE_CLAUDE_SETTINGS, async (_e, patch: Record<string, unknown>) => {
+  const { writeClaudeSettings } = await import('./claude/settings-bridge.js')
+  return writeClaudeSettings(patch)
+})
+
+ipcMain.handle(IPC.READ_GLOBAL_CLAUDEMD, async () => {
+  const { readGlobalCLAUDEMd } = await import('./claude/settings-bridge.js')
+  return readGlobalCLAUDEMd()
+})
+
+ipcMain.handle(IPC.WRITE_GLOBAL_CLAUDEMD, async (_e, content: string) => {
+  const { writeGlobalCLAUDEMd } = await import('./claude/settings-bridge.js')
+  await writeGlobalCLAUDEMd(content)
+})
+
+ipcMain.handle(IPC.READ_PROJECT_CLAUDEMD, async (_e, projectPath: string) => {
+  const { readProjectCLAUDEMd } = await import('./claude/settings-bridge.js')
+  return readProjectCLAUDEMd(projectPath)
+})
+
+ipcMain.handle(IPC.WRITE_PROJECT_CLAUDEMD, async (_e, { projectPath, content }: { projectPath: string; content: string }) => {
+  const { writeProjectCLAUDEMd } = await import('./claude/settings-bridge.js')
+  await writeProjectCLAUDEMd(projectPath, content)
+})
+
+// Start the settings watcher early so listeners get hot-reload from the start.
+// Imported via dynamic import to avoid loading the module on cold paths.
+import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
+  const watcher = getSettingsWatcher()
+  watcher.start()
+  watcher.on('change', (kind: 'settings' | 'claudemd') => {
+    broadcast(IPC.CLAUDE_SETTINGS_CHANGED, kind)
+  })
+}).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
+
 ipcMain.handle(IPC.RESPOND_PERMISSION, (_event, { tabId, questionId, optionId }: { tabId: string; questionId: string; optionId: string }) => {
   log(`IPC RESPOND_PERMISSION: tab=${tabId} question=${questionId} option=${optionId}`)
   return controlPlane.respondToPermission(tabId, questionId, optionId)

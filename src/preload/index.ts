@@ -16,6 +16,8 @@ import type {
   PreferredTerminalId,
   TerminalInstallation,
   ModelInfo,
+  ClaudeSettings,
+  ClaudeSettingsChangeKind,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -55,6 +57,15 @@ export interface CluiAPI {
   setPermissionMode(mode: string): void
   /** Phase A — list models the Claude CLI accepts */
   listModels(): Promise<{ models: ModelInfo[]; cliVersion: string | null }>
+  // ─── Phase B: settings + CLAUDE.md bridge ───
+  readClaudeSettings(): Promise<ClaudeSettings>
+  writeClaudeSettings(patch: ClaudeSettings): Promise<ClaudeSettings>
+  readGlobalCLAUDEMd(): Promise<string>
+  writeGlobalCLAUDEMd(content: string): Promise<void>
+  readProjectCLAUDEMd(projectPath: string): Promise<string>
+  writeProjectCLAUDEMd(projectPath: string, content: string): Promise<void>
+  /** Subscribe to ~/.claude file changes from external editors / Claude CLI. */
+  onClaudeSettingsChanged(callback: (kind: ClaudeSettingsChangeKind) => void): () => void
   btwPrompt(opts: BtwOptions): Promise<void>
   onBtwEvent(callback: (event: BtwEvent) => void): () => void
   // ─── Search ───
@@ -138,6 +149,19 @@ const api: CluiAPI = {
     ipcRenderer.invoke(IPC.MARKETPLACE_UNINSTALL, { pluginName }),
   setPermissionMode: (mode) => ipcRenderer.send(IPC.SET_PERMISSION_MODE, mode),
   listModels: () => ipcRenderer.invoke(IPC.LIST_MODELS),
+  // Phase B — settings + CLAUDE.md bridge
+  readClaudeSettings: () => ipcRenderer.invoke(IPC.READ_CLAUDE_SETTINGS),
+  writeClaudeSettings: (patch) => ipcRenderer.invoke(IPC.WRITE_CLAUDE_SETTINGS, patch),
+  readGlobalCLAUDEMd: () => ipcRenderer.invoke(IPC.READ_GLOBAL_CLAUDEMD),
+  writeGlobalCLAUDEMd: (content) => ipcRenderer.invoke(IPC.WRITE_GLOBAL_CLAUDEMD, content),
+  readProjectCLAUDEMd: (projectPath) => ipcRenderer.invoke(IPC.READ_PROJECT_CLAUDEMD, projectPath),
+  writeProjectCLAUDEMd: (projectPath, content) =>
+    ipcRenderer.invoke(IPC.WRITE_PROJECT_CLAUDEMD, { projectPath, content }),
+  onClaudeSettingsChanged: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, kind: ClaudeSettingsChangeKind) => callback(kind)
+    ipcRenderer.on(IPC.CLAUDE_SETTINGS_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC.CLAUDE_SETTINGS_CHANGED, handler)
+  },
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
   triggerSearchIndex: () => ipcRenderer.send(IPC.SEARCH_BUILD_INDEX),

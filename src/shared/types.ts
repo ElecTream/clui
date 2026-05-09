@@ -533,6 +533,15 @@ export const IPC = {
   // Model registry (Phase A — adaptive model detection)
   LIST_MODELS: 'clui:list-models',
 
+  // Settings + CLAUDE.md bridge (Phase B — parity with Claude CLI config)
+  READ_CLAUDE_SETTINGS: 'clui:read-claude-settings',
+  WRITE_CLAUDE_SETTINGS: 'clui:write-claude-settings',
+  READ_GLOBAL_CLAUDEMD: 'clui:read-global-claudemd',
+  WRITE_GLOBAL_CLAUDEMD: 'clui:write-global-claudemd',
+  READ_PROJECT_CLAUDEMD: 'clui:read-project-claudemd',
+  WRITE_PROJECT_CLAUDEMD: 'clui:write-project-claudemd',
+  CLAUDE_SETTINGS_CHANGED: 'clui:claude-settings-changed',
+
   // Auto-update
   CHECK_FOR_UPDATE: 'clui:check-for-update',
   INSTALL_UPDATE: 'clui:install-update',
@@ -556,6 +565,17 @@ export const IPC = {
  *
  * The renderer treats both uniformly when passing to `--model` at spawn time.
  */
+/**
+ * ClaudeSettings — Phase B. Read/write surface for `~/.claude/settings.json`.
+ *
+ * Intentionally typed as a loose Record rather than a strict shape — Claude
+ * CLI's settings schema isn't published, evolves often, and clui needs to
+ * round-trip unknown keys faithfully (read-modify-write must not drop fields
+ * it doesn't recognize).
+ */
+export type ClaudeSettings = Record<string, unknown>
+export type ClaudeSettingsChangeKind = 'settings' | 'claudemd'
+
 export interface ModelInfo {
   /** Value passed to `--model` flag */
   id: string
