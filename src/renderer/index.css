@@ -342,11 +342,12 @@ input::placeholder {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 10px;
 }
 
 .btn-stack {
   position: relative;
-  width: 158px; /* 3 × 46px buttons + 2 × 10px gaps = 158px */
+  width: 102px; /* 2 × 46px buttons + 1 × 10px gap = 102px */
   height: 46px;
   display: flex;
   flex-direction: row-reverse; /* button-1 (front) on right, button-3 (back) on left */

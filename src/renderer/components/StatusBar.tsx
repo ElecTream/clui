@@ -196,16 +196,12 @@ export function PermissionModePicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 transition-colors whitespace-nowrap flex-shrink-0"
-        style={{
-          color: colors.textTertiary,
-          cursor: 'pointer',
-        }}
-        title="Permission mode (global)"
+        data-clui-no-drag="true"
+        className="stack-btn glass-surface"
+        style={{ color: isAuto ? colors.accent : undefined }}
+        title={`Permission mode: ${isAuto ? 'Auto' : 'Ask'} — click to switch`}
       >
-        <ShieldCheck size={11} weight={isAuto ? 'fill' : 'regular'} />
-        {isAuto ? 'Auto' : 'Ask'}
-        <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
+        <ShieldCheck size={17} weight={isAuto ? 'fill' : 'regular'} />
       </button>
 
       {popoverLayer && open && createPortal(

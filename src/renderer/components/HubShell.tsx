@@ -32,7 +32,6 @@ export default function HubShell() {
     >
       <Sidebar view={view} setView={setView} />
       <main
-        data-clui-no-drag="true"
         style={{
           flex: 1,
           minWidth: 0,
@@ -62,7 +61,6 @@ function Sidebar({
   const colors = useColors()
   return (
     <nav
-      data-clui-no-drag="true"
       style={{
         width: 180,
         flexShrink: 0,

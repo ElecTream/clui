@@ -2,21 +2,18 @@ import React from 'react'
 import { ArrowsClockwise } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { ActiveTabChip } from './TabSwitcher'
-import { ModelPicker, PermissionModePicker, TerminalLaunchControl } from './StatusBar'
+import { ModelPicker, TerminalLaunchControl } from './StatusBar'
 import { useColors, useThemeStore } from '../theme'
 
 /**
  * Pill toolbar — the always-visible row above the input pill.
  *
- * Per the user's spec: pill carries only the four controls they reach
- * for during a chat. Everything else (history, marketplace, settings,
- * directory picker, "+ new chat") moves to the hub.
+ * Per the user's spec: pill carries only the controls they reach for
+ * during a chat. Everything else (history, marketplace, settings,
+ * directory picker, "+ new chat") moves to the hub. Permission mode
+ * lives as its own circle to the right of the hub circle.
  *
- *   [active-tab indicator] [model] [mode] [open-in-cli] [optional update]
- *
- * The hub-toggle button is rendered separately as a floating circle on
- * the right side of the input pill (mirroring the screenshot/attach
- * circles on the left), not inside this row.
+ *   [active-tab indicator] [model] [open-in-cli] [optional update]
  */
 
 function UpdateButton() {
@@ -77,8 +74,6 @@ export function TabStrip() {
         }}
       >
         <ModelPicker />
-        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
-        <PermissionModePicker />
       </div>
 
       <div

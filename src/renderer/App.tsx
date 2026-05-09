@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Paperclip, Camera, HeadCircuit, Stack } from '@phosphor-icons/react'
+import { Paperclip, Camera, Stack } from '@phosphor-icons/react'
 import { TabStrip } from './components/TabStrip'
+import { PermissionModePicker } from './components/StatusBar'
 import { InputBar, type InputBarHandle } from './components/InputBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { SearchPanel } from './components/SearchPanel'
@@ -332,40 +333,34 @@ export default function App() {
                 >
                   <Camera size={17} />
                 </button>
-                {/* btn-3: Skills (back, leftmost) */}
-                <button
-                  className="stack-btn stack-btn-3 glass-surface"
-                  title="Skills & Plugins"
-                  onClick={() => useSessionStore.getState().toggleMarketplace()}
-                  disabled={isRunning}
-                >
-                  <HeadCircuit size={17} />
-                </button>
+                {/* Marketplace circle removed — now lives in the hub. */}
               </div>
             </div>
 
-            {/* Hub-toggle floating circle on the RIGHT — mirrors the
-                screenshot/attach/skills circles on the left. Lives outside
-                the input pill so the pill chrome stays uncluttered. */}
+            {/* Right-side floating circles — mirrors the screenshot/attach
+                stack on the left. Hub-toggle first, then the permission
+                mode picker (Ask / Auto) so the user can flip safety modes
+                without crowding the in-pill chrome. */}
             <div data-clui-ui className="circles-out-right">
               <HubCircleButton />
+              <PermissionModePicker />
             </div>
 
-            {/* Input pill — chrome around the InputBar is drag-active. The
-                InputBar itself contains a textarea + buttons that opt out via
-                the useWindowDrag bail-out (textareas / buttons / inputs are
-                excluded from the drag walk). Generous vertical padding so
-                there's a visible drag-active strip above + below the textarea
-                — the user can grab the pill from any of that empty surface. */}
+            {/* Input pill — chrome around the InputBar is drag-active.
+                Textarea + buttons inside opt out of drag automatically
+                (the universal CSS rule excludes them) so click-to-focus
+                still works. Trimmed to a thin chrome rim — drag from
+                any of the chrome (above/below the textarea, the rounded
+                ends) or use the side-circles + button row above. */}
             <div
               ref={inputDragRef}
               data-clui-ui
               data-clui-drag="true"
               className="glass-surface w-full"
               style={{
-                minHeight: 60,
-                borderRadius: 30,
-                padding: '6px 10px 6px 18px',
+                minHeight: 50,
+                borderRadius: 25,
+                padding: '3px 10px 3px 16px',
                 background: colors.inputPillBg,
               }}
             >
