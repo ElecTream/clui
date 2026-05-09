@@ -8,13 +8,16 @@ import { StatusBar } from './components/StatusBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { SearchPanel } from './components/SearchPanel'
 import { BtwBubble } from './components/BtwBubble'
+import { CommandPalette } from './components/CommandPalette'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useSearchEvents } from './hooks/useSearchEvents'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useWindowDrag } from './hooks/useWindowDrag'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore, spacing } from './theme'
+import { IS_WIN } from './utils/shortcuts'
 
 const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 
@@ -115,6 +118,14 @@ export default function App() {
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
   const inputBarRef = useRef<InputBarHandle>(null)
 
+  // Phase 0.2 — drag-from-anywhere on the pill. Two refs because the pill is
+  // visually two stacked surfaces (the conversation shell and the input row);
+  // both should be drag-active. Children opt out via data-clui-no-drag="true".
+  const shellDragRef = useRef<HTMLDivElement>(null)
+  const inputDragRef = useRef<HTMLDivElement>(null)
+  useWindowDrag(shellDragRef)
+  useWindowDrag(inputDragRef)
+
   // Layout dimensions — expandedUI widens and heightens the panel
   const contentWidth = expandedUI ? 700 : spacing.contentWidth
   const cardExpandedWidth = expandedUI ? 700 : 460
@@ -122,11 +133,14 @@ export default function App() {
   const cardCollapsedMargin = expandedUI ? 15 : 15
   const bodyMaxHeight = expandedUI ? 520 : 400
 
-  const handleScreenshot = useCallback(async () => {
-    const result = await window.clui.takeScreenshot()
-    if (!result) return
-    addAttachments([result])
-  }, [addAttachments])
+  const handleScreenshot = useCallback(
+    async (mode?: 'region' | 'fullscreen') => {
+      const result = await window.clui.takeScreenshot(mode)
+      if (!result) return
+      addAttachments([result])
+    },
+    [addAttachments],
+  )
 
   const handleAttachFile = useCallback(async () => {
     const files = await window.clui.attachFiles()
@@ -141,6 +155,19 @@ export default function App() {
     onOpenSlashMenu: useCallback(() => inputBarRef.current?.openSlashMenu(), []),
     onVoiceCapture: useCallback(() => inputBarRef.current?.toggleVoice(), []),
   })
+
+  // Listen for global per-tab hotkeys (Ctrl+Alt+1..9 / Cmd+Alt+1..9). Main process
+  // shows the pill and broadcasts the tab index; we map index → tab ID and
+  // delegate to selectTab() so all the existing read/expand behavior fires.
+  useEffect(() => {
+    const off = window.clui.onActivateTabByIndex((index: number) => {
+      const { tabs, selectTab } = useSessionStore.getState()
+      if (index >= 0 && index < tabs.length) {
+        selectTab(tabs[index].id)
+      }
+    })
+    return off
+  }, [])
 
   return (
     <PopoverLayerProvider>
@@ -225,7 +252,9 @@ export default function App() {
             panel rendered above it, never inside it.
           */}
           <motion.div
+            ref={shellDragRef as unknown as React.Ref<HTMLDivElement>}
             data-clui-ui
+            data-clui-drag="true"
             className="overflow-hidden flex flex-col no-drag"
             animate={{
               width: isExpanded ? cardExpandedWidth : cardCollapsedWidth,
@@ -250,8 +279,12 @@ export default function App() {
               <TabStrip />
             </div>
 
-            {/* Body — chat history only; the marketplace is a separate overlay above */}
+            {/* Body — chat history only; the marketplace is a separate overlay above.
+                Marked no-drag so users can select message text + use scroll/buttons
+                without accidentally moving the window. The pill chrome around it
+                (tab strip, input bar) stays drag-active. */}
             <motion.div
+              data-clui-no-drag="true"
               initial={false}
               animate={{
                 height: isExpanded ? 'auto' : 0,
@@ -288,11 +321,12 @@ export default function App() {
                 >
                   <Paperclip size={17} />
                 </button>
-                {/* btn-2: Screenshot (middle) */}
+                {/* btn-2: Screenshot — region by default on Windows; Shift+Click for full screen.
+                    On macOS the OS already gives an interactive selection via screencapture -i. */}
                 <button
                   className="stack-btn stack-btn-2 glass-surface"
-                  title="Take screenshot"
-                  onClick={handleScreenshot}
+                  title={IS_WIN ? 'Snip a region · Shift+Click: full screen' : 'Take screenshot'}
+                  onClick={(e) => handleScreenshot(IS_WIN && e.shiftKey ? 'fullscreen' : undefined)}
                   disabled={isRunning}
                 >
                   <Camera size={17} />
@@ -309,9 +343,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Input pill */}
+            {/* Input pill — chrome around the InputBar is drag-active. The
+                InputBar itself contains a textarea + buttons that opt out via
+                the useWindowDrag bail-out (textareas / buttons / inputs are
+                excluded from the drag walk). */}
             <div
+              ref={inputDragRef}
               data-clui-ui
+              data-clui-drag="true"
               className="glass-surface w-full"
               style={{ minHeight: 50, borderRadius: 25, padding: '0 6px 0 16px', background: colors.inputPillBg }}
             >
@@ -321,6 +360,9 @@ export default function App() {
 
         </div>
       </div>
+      {/* Phase 0.5b — Command Palette (Ctrl+Space). Rendered via portal so it
+          floats above the pill regardless of expanded/collapsed state. */}
+      <CommandPalette />
     </PopoverLayerProvider>
   )
 }

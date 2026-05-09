@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, CatalogPlugin, PluginStatus, TodoTask, SearchIndexStatus } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import notificationSrc from '../../../resources/notification.mp3'
@@ -101,6 +102,10 @@ interface State {
   historyPickerOpen: boolean
   toggleHistoryPicker: () => void
   closeHistoryPicker: () => void
+  /** Phase 0.5b — Command Palette (Ctrl+Space) overlay state */
+  commandPaletteOpen: boolean
+  setCommandPaletteOpen: (open: boolean) => void
+  toggleCommandPalette: () => void
   /** Search panel */
   toggleSearchPanel: () => void
   closeSearchPanel: () => void
@@ -311,7 +316,7 @@ const backendTabRegistrations = new Map<string, Promise<string>>()
 
 const initialTab = makeLocalTab()
 
-export const useSessionStore = create<State>((set, get) => ({
+export const useSessionStore = create<State>()(persist((set, get) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
   isExpanded: false,
@@ -322,6 +327,7 @@ export const useSessionStore = create<State>((set, get) => ({
 
   // History picker
   historyPickerOpen: false,
+  commandPaletteOpen: false,
 
   // Copy feedback
   copiedMessageId: null,
@@ -621,6 +627,18 @@ export const useSessionStore = create<State>((set, get) => ({
 
   closeHistoryPicker: () => {
     set({ historyPickerOpen: false })
+  },
+
+  setCommandPaletteOpen: (open) => {
+    set({ commandPaletteOpen: open })
+  },
+
+  toggleCommandPalette: () => {
+    set((s) => ({
+      commandPaletteOpen: !s.commandPaletteOpen,
+      // Closing other top-level overlays when palette opens
+      ...(s.commandPaletteOpen ? {} : { marketplaceOpen: false, searchPanelOpen: false, historyPickerOpen: false }),
+    }))
   },
 
   toggleSearchPanel: () => {
@@ -1525,4 +1543,47 @@ export const useSessionStore = create<State>((set, get) => ({
       }),
     }))
   },
+}), {
+  name: 'clui-session',
+  storage: createJSONStorage(() => localStorage),
+  // Persist only the durable scaffolding of each tab (directory + sessionId + title).
+  // Messages are intentionally NOT persisted — Claude Code itself stores the JSONL
+  // history under ~/.claude/projects/, and resuming a tab passes --resume <sessionId>
+  // which gets the conversation context from there. Saving messages here would
+  // double-store and risk drift.
+  partialize: (state) => ({
+    activeTabId: state.activeTabId,
+    isExpanded: state.isExpanded,
+    permissionMode: state.permissionMode,
+    preferredModel: state.preferredModel,
+    tabs: state.tabs.map((t) => ({
+      id: t.id,
+      title: t.title,
+      workingDirectory: t.workingDirectory,
+      hasChosenDirectory: t.hasChosenDirectory,
+      additionalDirs: t.additionalDirs,
+      claudeSessionId: t.claudeSessionId,
+      // Reset transient runtime fields on rehydrate — backend tabs don't survive
+      // an app quit, so they get re-registered lazily on next interaction via
+      // ensureBackendTabRegistered().
+      status: 'idle' as TabStatus,
+      activeRequestId: null,
+      currentActivity: '',
+      messages: [],
+      lastResult: null,
+      sessionModel: null,
+      sessionTools: [],
+      sessionMcpServers: [],
+      sessionSkills: [],
+      sessionVersion: null,
+      queuedPrompts: [],
+      todos: {},
+      todoMessageId: null,
+      isCompacting: false,
+      compactionMessageId: null,
+      hasUnread: false,
+    })),
+  }),
+  // Bump version when the persisted shape changes incompatibly so old data is dropped.
+  version: 1,
 }))

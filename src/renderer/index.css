@@ -272,7 +272,14 @@ input::placeholder {
   animation: bounce-dot 1.2s ease-in-out infinite;
 }
 
-/* ─── Stacking circle buttons ─── */
+/* ─── Action circle buttons (Phase 0.3 redesign) ─── */
+/*
+ * Originally these collapsed to a stacked overlap and spread on hover. Users
+ * complained about finicky hover detection and accidental misclicks on the
+ * back-most button. They are now always spread side-by-side for predictable
+ * clicks. The pill-level :hover group still controls visibility (icons fade
+ * in/out with the rest of the pill chrome) — see `.pill-actions:hover`.
+ */
 .circles-out {
   position: absolute;
   right: calc(100% + 10px);
@@ -285,13 +292,18 @@ input::placeholder {
 
 .btn-stack {
   position: relative;
-  width: 160px;
+  width: 158px; /* 3 × 46px buttons + 2 × 10px gaps = 158px */
   height: 46px;
+  display: flex;
+  flex-direction: row-reverse; /* button-1 (front) on right, button-3 (back) on left */
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
   overflow: visible;
 }
 
 .stack-btn {
-  position: absolute;
+  position: relative;
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -300,22 +312,29 @@ input::placeholder {
   justify-content: center;
   color: var(--clui-text-tertiary);
   cursor: pointer;
-  transition: right 0.4s cubic-bezier(0.34, 1.3, 0.64, 1),
-              color 0.15s ease,
-              background 0.15s ease;
+  flex-shrink: 0;
+  transition: color var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out),
+              background var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out),
+              transform var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out);
 }
-.stack-btn:hover:not(:disabled) { color: var(--clui-btn-hover-color); background: var(--clui-btn-hover-bg); }
+.stack-btn:hover:not(:disabled) {
+  color: var(--clui-btn-hover-color);
+  background: var(--clui-btn-hover-bg);
+  /* Subtle press-up feel on hover — Phase 0.0 design language */
+  transform: translateY(-1px);
+}
+.stack-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
 .stack-btn:disabled { color: var(--clui-btn-disabled); cursor: default; }
-
-/* Collapsed: stacked on the right, overlapping */
-.stack-btn-1 { right: 0;    z-index: 3; }
-.stack-btn-2 { right: 28px; z-index: 2; }
-.stack-btn-3 { right: 56px; z-index: 1; }
-
-/* Expanded on hover: spread evenly */
-.btn-stack:hover .stack-btn-1 { right: 0; }
-.btn-stack:hover .stack-btn-2 { right: 56px; }
-.btn-stack:hover .stack-btn-3 { right: 112px; }
+/* Generous hit-zone ring (Phase 0.3): 8px outside the visible 46px circle.
+   Catches near-misses without enlarging the visible icon. */
+.stack-btn::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
 
 .no-drag {
   cursor: default;
