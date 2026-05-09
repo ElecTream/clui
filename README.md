@@ -1,15 +1,16 @@
 # Clui - The better UI for Claude Code
 
-> [!NOTE] 
-> This is a forked project from [Lucas Couto](https://github.com/lcoutodemos)'s [Clui CC](https://github.com/lcoutodemos/clui-cc) with some of my additions!
+> [!NOTE]
+> **Windows fork** of [Youssef2430/clui](https://github.com/Youssef2430/clui), which is itself a fork of [Lucas Couto](https://github.com/lcoutodemos)'s [Clui CC](https://github.com/lcoutodemos/clui-cc).
+> Native Windows support is in active development on the `windows-support` branch — see [docs/WINDOWS.md](docs/WINDOWS.md) for the current parity matrix and known issues.
 
-It's a lightweight, transparent desktop overlay for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on macOS. Clui wraps the Claude Code CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace.
+It's a lightweight, transparent desktop overlay for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Clui wraps the Claude Code CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace. Originally macOS-only; this fork adds Windows 11 native support.
 
 ![Hero](resources/hero.jpeg)
 
 ## Features
 
-- **Floating overlay** - transparent, click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
+- **Floating overlay** - transparent, click-through window that stays on top. Toggle with `⌥ + Space` on macOS / `Ctrl + Alt + C` on Windows (fallback: `Cmd/Ctrl + Shift + K`).
 - **Multi-tab sessions** - each tab spawns its own `claude -p` process with independent session state.
 - **Permission approval UI** - intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
 - **Conversation history** - browse and resume past Claude Code sessions.
@@ -37,7 +38,7 @@ Visit **[clui.app](https://clui.app)** to install via Homebrew or download the `
 brew install --cask Youssef2430/clui/clui
 ```
 
-### DMG Download
+### DMG Download (macOS)
 
 Download the latest `.dmg` from [Releases](https://github.com/Youssef2430/clui/releases):
 
@@ -50,9 +51,26 @@ Download the latest `.dmg` from [Releases](https://github.com/Youssef2430/clui/r
 > ```
 > You only need to do this once.
 
+### Windows
+
+Once the Windows fork is published to a GitHub Release, install via:
+
+```powershell
+# winget (preferred)
+winget install <YOUR_GITHUB_HANDLE>.Clui
+
+# scoop (if you've added the bucket)
+scoop bucket add clui https://github.com/<YOUR_GITHUB_HANDLE>/scoop-bucket
+scoop install clui/clui
+
+# Direct download — grab Clui-Setup-x.x.x.exe from Releases.
+```
+
+> **First launch:** Windows SmartScreen will warn the installer is unsigned. Click **More info → Run anyway**. SmartScreen reputation accumulates after enough downloads — the warning will disappear over time. See [`docs/WINDOWS.md`](docs/WINDOWS.md) for details.
+
 ## Prerequisites
 
-- **macOS 13+** (Ventura or later)
+- **macOS 13+** (Ventura or later) **or Windows 10 1809+ / Windows 11**
 - **Claude Code CLI** - install with `npm install -g @anthropic-ai/claude-code` and authenticate by running `claude`
 
 > **No API keys or `.env` file required.** Clui uses your existing Claude Code CLI authentication (Pro/Team/Enterprise subscription).
@@ -86,7 +104,12 @@ Renderer changes update instantly. Main-process changes require restarting `npm 
 | `npm run build` | Production build (no packaging) |
 | `npm run dist` | Package as macOS `.app` into `release/` |
 | `npm run dist:dmg` | Build DMG + ZIP for both architectures |
-| `npm run doctor` | Run environment diagnostic |
+| `npm run dist:win` | Build Windows NSIS installer + portable .exe |
+| `npm run dist:win:nsis` | Build Windows NSIS installer only |
+| `npm run dist:win:portable` | Build Windows portable .exe only |
+| `npm run build-icons` | Regenerate `resources/icon.ico` + `tray.ico` from PNG sources |
+| `npm run setup` | (Windows) check prerequisites |
+| `npm run doctor` | Run environment diagnostic (auto-dispatches by platform) |
 
 </details>
 
@@ -102,8 +125,8 @@ npm run doctor
 
 ## Known Limitations
 
-- **macOS only** - transparent overlay, tray icon, and node-pty are macOS-specific.
 - **Requires Claude Code CLI** - Clui is a UI layer, not a standalone AI client.
+- **Windows fork is in active development** — see [`docs/WINDOWS.md`](docs/WINDOWS.md) for the parity matrix. As of v0.2.0-win.0, screenshot capture and per-app terminal picker are macOS-only; everything else works on both.
 
 ## Q&A
 > Why didn't you just contribute to the original project ?

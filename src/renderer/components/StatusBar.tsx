@@ -336,7 +336,7 @@ function TerminalLaunchControl({
   const currentDescription = selectedTerminal
     ? `Launches in ${selectedTerminal.label}`
     : preferredTerminalId === 'auto'
-      ? 'Launches in your macOS default terminal app'
+      ? 'Launches in your default terminal app'
       : 'Launches in your saved terminal app'
 
   return (
@@ -403,7 +403,7 @@ function TerminalLaunchControl({
                 Open in CLI
               </div>
               <div className="text-[11px] leading-[1.4] mt-1" style={{ color: colors.textTertiary }}>
-                Pick an installed terminal to save it as the launcher. Automatic uses the macOS default handler.
+                Pick an installed terminal to save it as the launcher. Automatic uses the system default.
               </div>
             </div>
 
@@ -418,7 +418,7 @@ function TerminalLaunchControl({
               <div className="min-w-0">
                 <div className="truncate">Automatic</div>
                 <div className="text-[11px] mt-0.5" style={{ color: colors.textTertiary }}>
-                  Use macOS default terminal app
+                  Use the system default terminal app
                 </div>
               </div>
               {selectedTerminalValue === 'auto' && <Check size={12} style={{ color: colors.accent }} />}
@@ -434,7 +434,7 @@ function TerminalLaunchControl({
 
             {!terminalsLoading && terminals.length === 0 && (
               <div className="px-2.5 py-2 text-[11px] leading-[1.4]" style={{ color: colors.textTertiary }}>
-                No individual terminal apps were detected. Automatic still uses whatever macOS opens for terminal scripts.
+                No individual terminal apps were detected. Automatic still uses whatever the system opens for terminal scripts.
               </div>
             )}
 

@@ -493,6 +493,7 @@ export const IPC = {
   SET_WINDOW_WIDTH: 'clui:set-window-width',
   HIDE_WINDOW: 'clui:hide-window',
   WINDOW_SHOWN: 'clui:window-shown',
+  ACTIVATE_TAB_BY_INDEX: 'clui:activate-tab-by-index',
   SET_IGNORE_MOUSE_EVENTS: 'clui:set-ignore-mouse-events',
   START_WINDOW_DRAG: 'clui:start-window-drag',
   RESET_WINDOW_POSITION: 'clui:reset-window-position',

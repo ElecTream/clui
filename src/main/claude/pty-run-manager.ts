@@ -22,6 +22,7 @@ import { execSync } from 'child_process'
 import { appendFileSync, chmodSync, existsSync, statSync } from 'fs'
 import type { NormalizedEvent, RunOptions, EnrichedError } from '../../shared/types'
 import { getCliEnv } from '../cli-env'
+import { findClaudeBinaryWin, wrapForCmd } from '../platform/win-process'
 
 // node-pty is a native module — require at runtime to avoid Vite bundling issues
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -289,6 +290,8 @@ export class PtyRunManager extends EventEmitter {
    * Ensure it's executable at runtime to avoid "posix_spawnp failed".
    */
   private _ensureSpawnHelperExecutable(): void {
+    // Windows has no spawn-helper binary; ConPTY needs no permission fix.
+    if (process.platform === 'win32') return
     try {
       const pkgPath = require.resolve('node-pty/package.json')
       const path = require('path') as typeof import('path')
@@ -311,6 +314,10 @@ export class PtyRunManager extends EventEmitter {
   }
 
   private _findClaudeBinary(): string {
+    if (process.platform === 'win32') {
+      return findClaudeBinaryWin()
+    }
+
     const candidates = [
       '/usr/local/bin/claude',
       '/opt/homebrew/bin/claude',
@@ -376,7 +383,11 @@ export class PtyRunManager extends EventEmitter {
     log(`Starting PTY run ${requestId}: ${this.claudeBinary} ${args.join(' ')}`)
     log(`Prompt: ${options.prompt.substring(0, 200)}`)
 
-    const ptyProcess = pty.spawn(this.claudeBinary, args, {
+    // On Windows, .cmd shims must be launched via cmd.exe — pty.spawn cannot dispatch
+    // them directly. ConPTY then attaches to the cmd.exe console, which forwards to claude.
+    const [exe, finalArgs] =
+      process.platform === 'win32' ? wrapForCmd(this.claudeBinary, args) : [this.claudeBinary, args]
+    const ptyProcess = pty.spawn(exe, finalArgs, {
       name: 'xterm-256color',
       cols: 120,
       rows: 40,

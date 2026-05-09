@@ -2,9 +2,10 @@ import { spawn, execSync, ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { homedir } from 'os'
 import { appendFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { StreamParser } from './stream-parser'
 import { getCliEnv } from './cli-env'
+import { findClaudeBinaryWin, killTree, wrapForCmd } from './platform/win-process'
 import type { ClaudeEvent, RunOptions } from '../shared/types'
 
 const LOG_FILE = join(homedir(), '.clui-debug.log')
@@ -36,6 +37,10 @@ export class ProcessManager extends EventEmitter {
   }
 
   private findClaudeBinary(): string {
+    if (process.platform === 'win32') {
+      return findClaudeBinaryWin()
+    }
+
     // Try common locations
     const candidates = [
       '/usr/local/bin/claude',
@@ -107,12 +112,15 @@ export class ProcessManager extends EventEmitter {
     const env = getCliEnv()
 
     // Ensure our claude binary's directory is in PATH
-    const binDir = this.claudeBinary.substring(0, this.claudeBinary.lastIndexOf('/'))
-    if (env.PATH && !env.PATH.includes(binDir)) {
-      env.PATH = `${binDir}:${env.PATH}`
+    const binDir = dirname(this.claudeBinary)
+    const sep = process.platform === 'win32' ? ';' : ':'
+    if (binDir && env.PATH && !env.PATH.includes(binDir)) {
+      env.PATH = `${binDir}${sep}${env.PATH}`
     }
 
-    const child = spawn(this.claudeBinary, args, {
+    const [exe, finalArgs] =
+      process.platform === 'win32' ? wrapForCmd(this.claudeBinary, args) : [this.claudeBinary, args]
+    const child = spawn(exe, finalArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       env,
@@ -172,13 +180,18 @@ export class ProcessManager extends EventEmitter {
     if (!handle) return false
 
     log(`Cancelling run ${runId}`)
-    handle.process.kill('SIGINT')
-
-    setTimeout(() => {
-      if (handle.process.exitCode === null) {
-        handle.process.kill('SIGTERM')
-      }
-    }, 5000)
+    if (process.platform === 'win32') {
+      // Windows: SIGINT/SIGTERM map to TerminateProcess (no graceful shutdown) and leak
+      // tool subprocesses Claude spawned. taskkill /T walks the whole tree.
+      killTree(handle.process.pid)
+    } else {
+      handle.process.kill('SIGINT')
+      setTimeout(() => {
+        if (handle.process.exitCode === null) {
+          handle.process.kill('SIGTERM')
+        }
+      }, 5000)
+    }
 
     return true
   }

@@ -1,12 +1,12 @@
 name: Build & Release
 
-# Manual trigger only — use as a fallback when you can't build locally.
-# Default flow: run `npm run dist:dmg -- --publish always` from your Mac.
+# Manual trigger — use when you can't build locally, or to produce signed/notarized
+# artifacts on hosted runners. Builds macOS arm64+x64 DMGs and Windows x64 NSIS+portable.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Git tag to build (e.g. v0.1.13). Must already exist.'
+        description: 'Git tag to build (e.g. v0.2.0-win.0). Must already exist.'
         required: true
 
 jobs:
@@ -17,11 +17,16 @@ jobs:
         include:
           - runner: macos-latest
             arch: arm64
+            target: '--mac'
           - runner: macos-13
             arch: x64
+            target: '--mac'
+          - runner: windows-latest
+            arch: x64
+            target: '--win'
 
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -41,7 +46,9 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # macOS: sign + notarize via Apple credentials
       - name: Build, sign & notarize (${{ matrix.arch }})
+        if: runner.os == 'macOS'
         env:
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
@@ -49,14 +56,28 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac --arch ${{ matrix.arch }} --publish always
+        run: npx electron-builder ${{ matrix.target }} --arch ${{ matrix.arch }} --publish always
+
+      # Windows: optional code signing via WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD secrets.
+      # If those aren't set, electron-builder produces an unsigned installer (SmartScreen
+      # will warn on first run; documented in docs/WINDOWS.md).
+      - name: Build & publish (Windows ${{ matrix.arch }})
+        if: runner.os == 'Windows'
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder ${{ matrix.target }} --x64 --publish always
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.arch }}
+          name: release-${{ matrix.runner }}-${{ matrix.arch }}
           path: |
             release/*.dmg
             release/*.zip
+            release/*.exe
             release/*.yml
+            release/*.blockmap
           retention-days: 30
+          if-no-files-found: ignore

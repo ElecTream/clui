@@ -1,0 +1,25 @@
+PackageIdentifier: <YOUR_GITHUB_HANDLE>.Clui
+PackageVersion: 0.2.0
+PackageLocale: en-US
+Publisher: <YOUR_GITHUB_HANDLE>
+PublisherUrl: https://github.com/<YOUR_GITHUB_HANDLE>
+PublisherSupportUrl: https://github.com/<YOUR_GITHUB_HANDLE>/clui/issues
+PackageName: Clui
+PackageUrl: https://github.com/<YOUR_GITHUB_HANDLE>/clui
+License: MIT
+LicenseUrl: https://github.com/<YOUR_GITHUB_HANDLE>/clui/blob/main/LICENSE
+ShortDescription: Transparent floating overlay UI for Claude Code on Windows.
+Description: |
+  Clui wraps the Claude Code CLI in a floating pill interface with multi-tab sessions,
+  permission approval UI, voice input, conversation history, and a skills marketplace.
+  This is the Windows fork — toggle the overlay with Ctrl + Alt + C.
+Tags:
+  - claude
+  - claude-code
+  - ai
+  - cli
+  - terminal
+  - overlay
+  - productivity
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
