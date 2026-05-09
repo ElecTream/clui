@@ -947,9 +947,17 @@ function applyHostOffsetFromPill(): void {
   if (!hostWindow.isVisible()) return
   const p = mainWindow.getBounds()
   const h = hostWindow.getBounds()
-  hostWindow.setPosition(p.x + hostPillOffset.dx, p.y + hostPillOffset.dy)
-  // Preserve user's resize — only the position changes.
-  void h
+  // Use setBounds (not setPosition) and re-assert width/height explicitly.
+  // setPosition can cause subtle DPR-conversion size drift when the host
+  // and pill straddle displays at different scaling factors — every
+  // 'move' tick during a pill drag would nudge the host's pixel size,
+  // appearing as the window slowly growing. setBounds locks both axes.
+  hostWindow.setBounds({
+    x: Math.round(p.x + hostPillOffset.dx),
+    y: Math.round(p.y + hostPillOffset.dy),
+    width: h.width,
+    height: h.height,
+  })
 }
 
 function showHostWindow(): void {

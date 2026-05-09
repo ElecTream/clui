@@ -286,7 +286,12 @@ export default function App() {
             className="overflow-hidden flex flex-col no-drag"
             style={{
               width: cardCollapsedWidth,
-              marginBottom: -14,
+              // Lift the toolbar off the input pill so they read as two
+              // separate surfaces. The previous -14 negative margin
+              // overlapped them — fine when the input pill was tall and
+              // had its own drag rim, visibly intersecting now that the
+              // input pill is trimmed.
+              marginBottom: 4,
               marginLeft: cardCollapsedMargin,
               marginRight: cardCollapsedMargin,
               background: colors.containerBgCollapsed,
