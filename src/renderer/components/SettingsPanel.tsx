@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut } from '@phosphor-icons/react'
+import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut, ArrowsClockwise, Copy, ArrowUpRight } from '@phosphor-icons/react'
 import { useColors, useThemeStore, type ThemeMode } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
+import type { ClaudeVersionInfo } from '../../shared/types'
 
 /**
  * SettingsPanel — Phase F.
@@ -405,6 +406,36 @@ function AboutSection() {
   const cliVersion = useSessionStore((s) => s.cliVersion)
   const availableModels = useSessionStore((s) => s.availableModels)
 
+  // Phase G — fetch installed vs latest CLI version on mount.
+  const [versionInfo, setVersionInfo] = useState<ClaudeVersionInfo | null>(null)
+  const [versionLoading, setVersionLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  const refreshVersion = useCallback(async (force = false) => {
+    setVersionLoading(true)
+    try {
+      const info = await window.clui.checkClaudeVersion?.(force)
+      setVersionInfo(info ?? null)
+    } catch {
+      setVersionInfo(null)
+    } finally {
+      setVersionLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshVersion()
+  }, [refreshVersion])
+
+  const onCopyUpgrade = (): void => {
+    if (!versionInfo) return
+    try {
+      navigator.clipboard.writeText(versionInfo.upgradeCommand)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <SectionHeading colors={colors}>clui</SectionHeading>
@@ -413,7 +444,96 @@ function AboutSection() {
       <InfoRow colors={colors} label="Subscription" value={staticInfo?.subscriptionType || '—'} />
 
       <SectionHeading colors={colors}>Claude CLI</SectionHeading>
-      <InfoRow colors={colors} label="Detected version" value={cliVersion || 'Not detected'} />
+      <InfoRow colors={colors} label="Detected version" value={cliVersion || versionInfo?.installed || 'Not detected'} />
+      <InfoRow
+        colors={colors}
+        label="Latest on npm"
+        value={versionLoading ? 'Checking…' : versionInfo?.latest || 'Unknown'}
+      />
+
+      {/* Update available banner */}
+      {versionInfo?.updateAvailable && versionInfo.installed && versionInfo.latest && (
+        <div
+          style={{
+            background: colors.accentSoft,
+            border: `1px solid ${colors.accentBorder}`,
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+            padding: 10,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+          }}
+        >
+          <ArrowUpRight size={14} style={{ color: colors.accent, marginTop: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: colors.textPrimary, fontSize: 11, fontWeight: 500 }}>
+              Claude CLI update available
+            </div>
+            <div style={{ color: colors.textSecondary, fontSize: 10, marginTop: 2 }}>
+              {versionInfo.installed} → {versionInfo.latest}. Run this in a terminal:
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                background: colors.codeBg,
+                borderRadius: 4,
+                padding: '4px 8px',
+                fontFamily: "'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace",
+                fontSize: 11,
+                color: colors.textPrimary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {versionInfo.upgradeCommand}
+              </span>
+              <button
+                data-clui-no-drag="true"
+                onClick={onCopyUpgrade}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: colors.accent,
+                  cursor: 'pointer',
+                  padding: 2,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title="Copy command"
+              >
+                {copied ? <Check size={11} /> : <Copy size={11} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        data-clui-no-drag="true"
+        onClick={() => refreshVersion(true)}
+        disabled={versionLoading}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'transparent',
+          color: colors.textTertiary,
+          border: 'none',
+          fontSize: 10,
+          padding: 0,
+          marginTop: -8,
+          cursor: versionLoading ? 'default' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        <ArrowsClockwise size={10} className={versionLoading ? 'animate-spin' : undefined} />
+        Check again
+      </button>
+
       <InfoRow colors={colors} label="Models available" value={`${availableModels.length} (${availableModels.filter((m) => m.kind === 'alias').length} aliases, ${availableModels.filter((m) => m.kind === 'pinned').length} pinned)`} />
 
       <SectionHeading colors={colors}>Paths</SectionHeading>

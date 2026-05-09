@@ -18,6 +18,7 @@ import type {
   ModelInfo,
   ClaudeSettings,
   ClaudeSettingsChangeKind,
+  ClaudeVersionInfo,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -66,6 +67,8 @@ export interface CluiAPI {
   writeProjectCLAUDEMd(projectPath: string, content: string): Promise<void>
   /** Subscribe to ~/.claude file changes from external editors / Claude CLI. */
   onClaudeSettingsChanged(callback: (kind: ClaudeSettingsChangeKind) => void): () => void
+  /** Phase G — installed vs latest Claude CLI; cached 1h. */
+  checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
   btwPrompt(opts: BtwOptions): Promise<void>
   onBtwEvent(callback: (event: BtwEvent) => void): () => void
   // ─── Search ───
@@ -162,6 +165,7 @@ const api: CluiAPI = {
     ipcRenderer.on(IPC.CLAUDE_SETTINGS_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.CLAUDE_SETTINGS_CHANGED, handler)
   },
+  checkClaudeVersion: (force) => ipcRenderer.invoke(IPC.CHECK_CLAUDE_VERSION, force),
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
   triggerSearchIndex: () => ipcRenderer.send(IPC.SEARCH_BUILD_INDEX),

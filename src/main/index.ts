@@ -1029,6 +1029,13 @@ ipcMain.handle(IPC.LIST_MODELS, async () => {
   return discoverModels()
 })
 
+// Phase G — Claude CLI version check. Caches result for 1h to avoid hitting
+// the npm registry on every Settings panel open.
+ipcMain.handle(IPC.CHECK_CLAUDE_VERSION, async (_e, force?: boolean) => {
+  const { checkClaudeVersion } = await import('./claude/version-check.js')
+  return checkClaudeVersion(force === true)
+})
+
 // Phase B — settings + CLAUDE.md bridge. clui treats ~/.claude/settings.json
 // and ~/.claude/CLAUDE.md as canonical: edits in either app round-trip, and
 // external changes (the CLI editing settings, the user editing CLAUDE.md in

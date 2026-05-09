@@ -533,6 +533,9 @@ export const IPC = {
   // Model registry (Phase A — adaptive model detection)
   LIST_MODELS: 'clui:list-models',
 
+  // Phase G — Claude CLI version check
+  CHECK_CLAUDE_VERSION: 'clui:check-claude-version',
+
   // Settings + CLAUDE.md bridge (Phase B — parity with Claude CLI config)
   READ_CLAUDE_SETTINGS: 'clui:read-claude-settings',
   WRITE_CLAUDE_SETTINGS: 'clui:write-claude-settings',
@@ -575,6 +578,16 @@ export const IPC = {
  */
 export type ClaudeSettings = Record<string, unknown>
 export type ClaudeSettingsChangeKind = 'settings' | 'claudemd'
+
+/** Phase G — Claude CLI version check result. */
+export interface ClaudeVersionInfo {
+  installed: string | null
+  latest: string | null
+  updateAvailable: boolean
+  compareResult: -1 | 0 | 1 | null
+  upgradeCommand: string
+  checkedAt: number
+}
 
 export interface ModelInfo {
   /** Value passed to `--model` flag */
