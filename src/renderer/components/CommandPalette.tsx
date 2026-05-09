@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSessionStore, AVAILABLE_MODELS } from '../stores/sessionStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { useColors, useThemeStore, motion as motionTokens, type ThemeMode } from '../theme'
 import { openInPreferredTerminal } from '../utils/terminal'
 
@@ -62,6 +62,7 @@ function useActions(closePalette: () => void): PaletteAction[] {
   const setExpandedUI = useThemeStore((s) => s.setExpandedUI)
   const permissionMode = useSessionStore((s) => s.permissionMode)
   const preferredModel = useSessionStore((s) => s.preferredModel)
+  const availableModels = useSessionStore((s) => s.availableModels)
 
   return useMemo(() => {
     const actions: PaletteAction[] = []
@@ -141,12 +142,12 @@ function useActions(closePalette: () => void): PaletteAction[] {
     })
 
     // ─── Models ───
-    AVAILABLE_MODELS.forEach((m) => {
+    availableModels.forEach((m) => {
       const active = preferredModel === m.id
       actions.push({
         id: `model-${m.id}`,
         label: `${active ? '✓ ' : ''}Model: ${m.label}`,
-        hint: m.id,
+        hint: m.kind === 'alias' ? `${m.id} · auto-tracks latest` : m.id,
         group: 'Model',
         run: wrap(() => useSessionStore.getState().setPreferredModel(m.id)),
       })
@@ -220,7 +221,7 @@ function useActions(closePalette: () => void): PaletteAction[] {
     }
 
     return actions
-  }, [tabs, activeTabId, themeMode, soundEnabled, expandedUI, permissionMode, preferredModel, setThemeMode, setSoundEnabled, setExpandedUI, closePalette])
+  }, [tabs, activeTabId, themeMode, soundEnabled, expandedUI, permissionMode, preferredModel, availableModels, setThemeMode, setSoundEnabled, setExpandedUI, closePalette])
 }
 
 export function CommandPalette() {

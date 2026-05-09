@@ -15,6 +15,7 @@ import type {
   SearchIndexStatus,
   PreferredTerminalId,
   TerminalInstallation,
+  ModelInfo,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -52,6 +53,8 @@ export interface CluiAPI {
   installPlugin(repo: string, pluginName: string, marketplace: string, sourcePath?: string, isSkillMd?: boolean): Promise<{ ok: boolean; error?: string }>
   uninstallPlugin(pluginName: string): Promise<{ ok: boolean; error?: string }>
   setPermissionMode(mode: string): void
+  /** Phase A — list models the Claude CLI accepts */
+  listModels(): Promise<{ models: ModelInfo[]; cliVersion: string | null }>
   btwPrompt(opts: BtwOptions): Promise<void>
   onBtwEvent(callback: (event: BtwEvent) => void): () => void
   // ─── Search ───
@@ -134,6 +137,7 @@ const api: CluiAPI = {
   uninstallPlugin: (pluginName) =>
     ipcRenderer.invoke(IPC.MARKETPLACE_UNINSTALL, { pluginName }),
   setPermissionMode: (mode) => ipcRenderer.send(IPC.SET_PERMISSION_MODE, mode),
+  listModels: () => ipcRenderer.invoke(IPC.LIST_MODELS),
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
   triggerSearchIndex: () => ipcRenderer.send(IPC.SEARCH_BUILD_INDEX),

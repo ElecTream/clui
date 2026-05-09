@@ -1,16 +1,34 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, CatalogPlugin, PluginStatus, TodoTask, SearchIndexStatus } from '../../shared/types'
+import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, CatalogPlugin, PluginStatus, TodoTask, SearchIndexStatus, ModelInfo } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import notificationSrc from '../../../resources/notification.mp3'
 
-// ─── Known models ───
+// ─── Models ───
+//
+// Phase A — adaptive registry. The actual list lives on the main process at
+// src/main/claude/model-registry.ts and is fetched via window.clui.listModels()
+// during initStaticInfo(). This array is the *fallback* list for cold-start /
+// when the IPC call fails, and the type below is what populates the runtime
+// store slice.
 
-export const AVAILABLE_MODELS = [
-  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-] as const
+export const FALLBACK_MODELS: ModelInfo[] = [
+  { id: 'sonnet', label: 'Sonnet (latest)', family: 'sonnet', kind: 'alias', isDefault: true },
+  { id: 'opus', label: 'Opus (latest)', family: 'opus', kind: 'alias' },
+  { id: 'haiku', label: 'Haiku (latest)', family: 'haiku', kind: 'alias' },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6', family: 'opus', kind: 'pinned' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', family: 'sonnet', kind: 'pinned' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', family: 'haiku', kind: 'pinned' },
+]
+
+/**
+ * @deprecated Read `useSessionStore(s => s.availableModels)` instead. This
+ * back-compat export returns the static fallback list; it does NOT reflect
+ * runtime updates from the model registry.
+ */
+export const AVAILABLE_MODELS: ReadonlyArray<{ id: string; label: string }> = FALLBACK_MODELS.map(
+  ({ id, label }) => ({ id, label }),
+)
 
 // ─── Persisted permission mode ───
 
@@ -49,6 +67,10 @@ interface State {
   preferredModel: string | null
   /** Global permission mode: 'ask' shows cards, 'auto' auto-approves all tool calls */
   permissionMode: 'ask' | 'auto'
+  /** Phase A — model registry. Populated from main via listModels() during initStaticInfo(). */
+  availableModels: ModelInfo[]
+  /** Detected Claude CLI version, or null if unknown / not installed. */
+  cliVersion: string | null
 
   // BTW side question state
   btwState: {
@@ -323,6 +345,10 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
   staticInfo: null,
   preferredModel: null,
   permissionMode: loadPermissionMode(),
+  // Phase A — model registry. Seeded with the fallback list; replaced
+  // by listModels() in initStaticInfo() once main responds.
+  availableModels: FALLBACK_MODELS,
+  cliVersion: null,
   btwState: null,
 
   // History picker
@@ -362,6 +388,17 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
       const mode = get().permissionMode
       if (mode !== 'ask') {
         window.clui.setPermissionMode(mode)
+      }
+      // Phase A — fetch the model registry. Non-blocking: fall back silently
+      // to FALLBACK_MODELS already seeded if listModels isn't wired yet
+      // (e.g., dev box on an older preload bundle).
+      try {
+        const reg = await window.clui.listModels?.()
+        if (reg && Array.isArray(reg.models) && reg.models.length > 0) {
+          set({ availableModels: reg.models, cliVersion: reg.cliVersion })
+        }
+      } catch {
+        // Stay on FALLBACK_MODELS
       }
     } catch {}
   },

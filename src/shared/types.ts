@@ -530,6 +530,9 @@ export const IPC = {
   // Permission mode
   SET_PERMISSION_MODE: 'clui:set-permission-mode',
 
+  // Model registry (Phase A — adaptive model detection)
+  LIST_MODELS: 'clui:list-models',
+
   // Auto-update
   CHECK_FOR_UPDATE: 'clui:check-for-update',
   INSTALL_UPDATE: 'clui:install-update',
@@ -542,3 +545,26 @@ export const IPC = {
   RUN_COMPLETE: 'clui:run-complete',
   RUN_ERROR: 'clui:run-error',
 } as const
+
+/**
+ * ModelInfo — Phase A. A single model entry exposed by the registry.
+ *
+ *  - `kind: 'alias'`   stable name like 'sonnet' / 'opus' / 'haiku' that the
+ *                      Claude CLI auto-routes to the latest version.
+ *  - `kind: 'pinned'`  full model ID like 'claude-sonnet-4-6' for reproducible
+ *                      runs.
+ *
+ * The renderer treats both uniformly when passing to `--model` at spawn time.
+ */
+export interface ModelInfo {
+  /** Value passed to `--model` flag */
+  id: string
+  /** User-facing name */
+  label: string
+  /** Family grouping for UI sorting */
+  family: 'opus' | 'sonnet' | 'haiku' | 'other'
+  kind: 'alias' | 'pinned'
+  isDefault?: boolean
+  /** Token context window if known */
+  contextWindow?: number
+}

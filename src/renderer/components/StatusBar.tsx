@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Terminal, CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
-import { useSessionStore, AVAILABLE_MODELS } from '../stores/sessionStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors, useThemeStore } from '../theme'
 import type { PreferredTerminalId, TerminalInstallation } from '../../shared/types'
@@ -12,12 +12,14 @@ import type { PreferredTerminalId, TerminalInstallation } from '../../shared/typ
 function ModelPicker() {
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+  const availableModels = useSessionStore((s) => s.availableModels)
   const tab = useSessionStore(
     (s) => s.tabs.find((t) => t.id === s.activeTabId),
     (a, b) => a === b || (!!a && !!b && a.status === b.status && a.sessionModel === b.sessionModel),
   )
   const popoverLayer = usePopoverLayer()
   const colors = useColors()
+  const defaultModel = availableModels.find((m) => m.isDefault) ?? availableModels[0]
 
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -55,14 +57,14 @@ function ModelPicker() {
 
   const activeLabel = (() => {
     if (preferredModel) {
-      const m = AVAILABLE_MODELS.find((m) => m.id === preferredModel)
+      const m = availableModels.find((m) => m.id === preferredModel)
       return m?.label || preferredModel
     }
     if (tab?.sessionModel) {
-      const m = AVAILABLE_MODELS.find((m) => m.id === tab.sessionModel)
+      const m = availableModels.find((m) => m.id === tab.sessionModel)
       return m?.label || tab.sessionModel
     }
-    return AVAILABLE_MODELS[0].label
+    return defaultModel?.label ?? 'Default'
   })()
 
   return (
@@ -104,8 +106,9 @@ function ModelPicker() {
           }}
         >
           <div className="py-1">
-            {AVAILABLE_MODELS.map((m) => {
-              const isSelected = preferredModel === m.id || (!preferredModel && m.id === AVAILABLE_MODELS[0].id)
+            {availableModels.map((m) => {
+              const isSelected =
+                preferredModel === m.id || (!preferredModel && m.id === defaultModel?.id)
               return (
                 <button
                   key={m.id}
@@ -116,7 +119,24 @@ function ModelPicker() {
                     fontWeight: isSelected ? 600 : 400,
                   }}
                 >
-                  {m.label}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {m.label}
+                    {m.kind === 'alias' && (
+                      <span
+                        style={{
+                          fontSize: 8,
+                          padding: '1px 4px',
+                          borderRadius: 3,
+                          background: colors.accentLight,
+                          color: colors.accent,
+                          textTransform: 'uppercase',
+                          letterSpacing: 'var(--clui-letter-spacing-label, 0.02em)',
+                        }}
+                      >
+                        latest
+                      </span>
+                    )}
+                  </span>
                   {isSelected && <Check size={12} style={{ color: colors.accent }} />}
                 </button>
               )

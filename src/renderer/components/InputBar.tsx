@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Microphone, ArrowUp, SpinnerGap, X, Check, Wrench, CheckCircle, FolderSimple } from '@phosphor-icons/react'
-import { useSessionStore, AVAILABLE_MODELS } from '../stores/sessionStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { AttachmentChips } from './AttachmentChips'
 import { SlashCommandMenu, getFilteredCommandsWithExtras, type SlashCommand } from './SlashCommandMenu'
 import { FileMentionMenu, getFileIcon, type FileMentionMenuHandle } from './FileMentionMenu'
@@ -209,6 +209,7 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const preferredModel = useSessionStore((s) => s.preferredModel)
+  const availableModels = useSessionStore((s) => s.availableModels)
   const activeTabId = useSessionStore((s) => s.activeTabId)
   const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   const colors = useColors()
@@ -485,9 +486,10 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
         const model = tab?.sessionModel || null
         const version = tab?.sessionVersion || staticInfo?.version || null
         const current = preferredModel || model || 'default'
-        const lines = AVAILABLE_MODELS.map((m) => {
+        const lines = availableModels.map((m) => {
           const active = m.id === current || (!preferredModel && m.id === model)
-          return `  ${active ? '\u25CF' : '\u25CB'} ${m.label} (${m.id})`
+          const tag = m.kind === 'alias' ? ' [latest]' : ''
+          return `  ${active ? '\u25CF' : '\u25CB'} ${m.label}${tag} (${m.id})`
         })
         const header = version ? `Claude Code ${version}` : 'Claude Code'
         addSystemMessage(`${header}\n\n${lines.join('\n')}\n\nSwitch model: type /model <name>\n  e.g. /model sonnet`)
@@ -638,7 +640,7 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
     const modelMatch = prompt.match(/^\/model\s+(\S+)/i)
     if (modelMatch) {
       const query = modelMatch[1].toLowerCase()
-      const match = AVAILABLE_MODELS.find((m: { id: string; label: string }) =>
+      const match = availableModels.find((m) =>
         m.id.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)
       )
       if (match) {

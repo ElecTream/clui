@@ -1018,6 +1018,14 @@ ipcMain.on(IPC.SET_PERMISSION_MODE, (_event, mode: string) => {
   controlPlane.setPermissionMode(mode)
 })
 
+// Phase A — model registry. Returns the curated list of models the Claude CLI
+// will accept on the --model flag, including stable aliases ('sonnet', 'opus',
+// 'haiku' which auto-track latest) and pinned full IDs for reproducible runs.
+ipcMain.handle(IPC.LIST_MODELS, async () => {
+  const { discoverModels } = await import('./claude/model-registry.js')
+  return discoverModels()
+})
+
 ipcMain.handle(IPC.RESPOND_PERMISSION, (_event, { tabId, questionId, optionId }: { tabId: string; questionId: string; optionId: string }) => {
   log(`IPC RESPOND_PERMISSION: tab=${tabId} question=${questionId} option=${optionId}`)
   return controlPlane.respondToPermission(tabId, questionId, optionId)
