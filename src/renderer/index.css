@@ -31,6 +31,34 @@ html[data-clui-window='host'] #root {
   background: var(--clui-container-bg, #0f0f0f);
 }
 
+/* ─── Native window drag (drag-from-anywhere) ───
+ *
+ * `-webkit-app-region: drag` is hardware-accelerated by the OS — no IPC
+ * round-trip per mousemove, no setBounds() lag. Mark a drag surface with
+ * data-clui-drag="true"; mark explicit interactive children with
+ * data-clui-no-drag="true" to opt them out. Common interactive tags also
+ * get no-drag automatically as a belt-and-suspenders default — without
+ * this the OS would intercept clicks on buttons and start dragging the
+ * window instead.
+ *
+ * Applies to both pill and host. Pill works *despite* transparent +
+ * setIgnoreMouseEvents because the drag region is only marked on
+ * hit-testable interactive surfaces, not the transparent canvas around
+ * them; click-through still works for the truly empty regions.
+ */
+[data-clui-drag='true'] {
+  -webkit-app-region: drag;
+}
+[data-clui-drag='true'] [data-clui-no-drag='true'],
+[data-clui-drag='true'] button,
+[data-clui-drag='true'] input,
+[data-clui-drag='true'] textarea,
+[data-clui-drag='true'] select,
+[data-clui-drag='true'] a,
+[data-clui-drag='true'] [contenteditable='true'] {
+  -webkit-app-region: no-drag;
+}
+
 /* ─── Synthetic caret for @mention mirror overlay ─── */
 .mirror-caret {
   display: inline-block;

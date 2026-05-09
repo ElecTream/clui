@@ -30,6 +30,11 @@ export default function HostApp() {
 
   return (
     <div
+      // Drag-from-anywhere: the entire host body is a drag region; CSS
+      // (index.css) opts out interactive children automatically. The OS
+      // handles the actual drag, no IPC. Native dead zone (~5px) prevents
+      // accidental clicks from moving the window.
+      data-clui-drag="true"
       style={{
         width: '100vw',
         height: '100vh',
@@ -37,9 +42,6 @@ export default function HostApp() {
         color: colors.textPrimary,
         display: 'flex',
         flexDirection: 'column',
-        // Custom drag region — Phase 0.1 first commit just needs *some*
-        // way to move the host so we can verify position persistence.
-        // Top 36px is drag, the rest will become real UI.
       }}
     >
       <div
@@ -54,11 +56,6 @@ export default function HostApp() {
           fontSize: 12,
           fontWeight: 'var(--clui-font-weight-body, 450)' as unknown as number,
           color: colors.textTertiary,
-          // The whole bar is draggable EXCEPT for explicit interactive
-          // children (which set data-clui-no-drag="true"). Since this is
-          // a placeholder there are no interactive children yet.
-          // @ts-expect-error -- WebkitAppRegion isn't typed but Electron supports it
-          WebkitAppRegion: 'drag',
         }}
       >
         <span>Clui — host window</span>

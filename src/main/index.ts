@@ -642,6 +642,16 @@ function createWindow(): void {
     }
   })
 
+  // Phase 0.1 stage 2 — host follows pill. 'move' fires continuously
+  // during native drag (and `setBounds` calls), so this is essentially
+  // free (no IPC). Spring physics polish lands later; for now an instant
+  // snap is enough to break the "host stays still while pill flies
+  // around" feel.
+  mainWindow.on('move', () => {
+    applyHostOffsetFromPill()
+    lastWindowBounds = mainWindow!.getBounds()
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -834,12 +844,23 @@ ipcMain.on(IPC.START_WINDOW_DRAG, (event, deltaX: number, deltaY: number) => {
       width: current.width,
       height: current.height,
     }
-    const display = screen.getDisplayMatching(proposed)
-    const wa = display.workArea
-    const nextX = Math.max(wa.x, Math.min(proposed.x, wa.x + wa.width - current.width))
-    const nextY = Math.max(wa.y, Math.min(proposed.y, wa.y + wa.height - current.height))
-    // Vertical is handled in two phases in the renderer: window first (until macOS clamps),
-    // then CSS translateY within the window — so deltaY here is always within allowed range
+    // Compute a permissive bound across ALL displays so the pill can roam
+    // freely. Old behavior clamped to a single display's work area, which
+    // made the pill feel "locked to a region" when crossing monitors. We
+    // keep a small on-screen margin so the user can't lose the pill by
+    // dragging it fully past every monitor.
+    const ON_SCREEN_MARGIN = 60
+    const displays = screen.getAllDisplays()
+    let unionLeft = Infinity, unionTop = Infinity, unionRight = -Infinity, unionBottom = -Infinity
+    for (const d of displays) {
+      const wa = d.workArea
+      if (wa.x < unionLeft) unionLeft = wa.x
+      if (wa.y < unionTop) unionTop = wa.y
+      if (wa.x + wa.width > unionRight) unionRight = wa.x + wa.width
+      if (wa.y + wa.height > unionBottom) unionBottom = wa.y + wa.height
+    }
+    const nextX = Math.max(unionLeft - current.width + ON_SCREEN_MARGIN, Math.min(proposed.x, unionRight - ON_SCREEN_MARGIN))
+    const nextY = Math.max(unionTop, Math.min(proposed.y, unionBottom - ON_SCREEN_MARGIN))
     win.setPosition(nextX, nextY)
     lastWindowBounds = win.getBounds()
     if (gridWindow && !gridWindow.isDestroyed() && gridWindow.isVisible()) {
@@ -1065,7 +1086,12 @@ function createHostWindow(): BrowserWindow {
       saveHostBounds({ x: b.x, y: b.y, width: b.width, height: b.height })
     }, 200)
   }
-  hostWindow.on('moved', persistBounds)
+  hostWindow.on('moved', () => {
+    persistBounds()
+    // User-initiated host drag: relock the offset so future pill drags
+    // carry the host at the *new* relative place, not the original.
+    captureHostOffset()
+  })
   hostWindow.on('resized', persistBounds)
 
   hostWindow.on('close', (e) => {
@@ -1093,11 +1119,44 @@ function createHostWindow(): BrowserWindow {
   return hostWindow
 }
 
+// Relative offset from pill top-left → host top-left. Captured the first
+// time the host opens (default placement is "above and centered on the
+// pill"), updated whenever the user drags the host manually so their
+// preferred relationship persists.
+let hostPillOffset: { dx: number; dy: number } | null = null
+
+function captureHostOffset(): void {
+  if (!hostWindow || hostWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return
+  const h = hostWindow.getBounds()
+  const p = mainWindow.getBounds()
+  hostPillOffset = { dx: h.x - p.x, dy: h.y - p.y }
+}
+
+function applyHostOffsetFromPill(): void {
+  if (!hostWindow || hostWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return
+  if (!hostPillOffset) return
+  // Skip the relayout if the host is hidden — no point repositioning a
+  // window the user can't see, and avoids re-show flicker if pill bounce
+  // events fire while the user is mid-toggle.
+  if (!hostWindow.isVisible()) return
+  const p = mainWindow.getBounds()
+  const h = hostWindow.getBounds()
+  hostWindow.setPosition(p.x + hostPillOffset.dx, p.y + hostPillOffset.dy)
+  // Preserve user's resize — only the position changes.
+  void h
+}
+
 function showHostWindow(): void {
   const win = createHostWindow()
   // Always re-assert space membership before show; lost on hide/show cycles.
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.show()
+  // First-time-shown calibration: lock in the offset between host and pill
+  // so subsequent pill drags carry the host along at the same relative
+  // place. Subsequent shows reuse the saved offset (user-respected).
+  if (!hostPillOffset) {
+    captureHostOffset()
+  }
 }
 
 function hideHostWindow(): void {
