@@ -128,6 +128,10 @@ interface State {
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
   toggleCommandPalette: () => void
+  /** Phase F — Settings Panel overlay state */
+  settingsPanelOpen: boolean
+  setSettingsPanelOpen: (open: boolean) => void
+  toggleSettingsPanel: () => void
   /** Search panel */
   toggleSearchPanel: () => void
   closeSearchPanel: () => void
@@ -354,6 +358,7 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
   // History picker
   historyPickerOpen: false,
   commandPaletteOpen: false,
+  settingsPanelOpen: false,
 
   // Copy feedback
   copiedMessageId: null,
@@ -674,7 +679,18 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
     set((s) => ({
       commandPaletteOpen: !s.commandPaletteOpen,
       // Closing other top-level overlays when palette opens
-      ...(s.commandPaletteOpen ? {} : { marketplaceOpen: false, searchPanelOpen: false, historyPickerOpen: false }),
+      ...(s.commandPaletteOpen ? {} : { marketplaceOpen: false, searchPanelOpen: false, historyPickerOpen: false, settingsPanelOpen: false }),
+    }))
+  },
+
+  setSettingsPanelOpen: (open) => {
+    set({ settingsPanelOpen: open })
+  },
+
+  toggleSettingsPanel: () => {
+    set((s) => ({
+      settingsPanelOpen: !s.settingsPanelOpen,
+      ...(s.settingsPanelOpen ? {} : { marketplaceOpen: false, searchPanelOpen: false, historyPickerOpen: false, commandPaletteOpen: false }),
     }))
   },
 

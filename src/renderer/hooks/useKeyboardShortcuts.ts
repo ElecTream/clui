@@ -42,6 +42,12 @@ function smartEsc(): boolean {
     return true
   }
 
+  // 2b. Close settings panel (Phase F)
+  if (state.settingsPanelOpen) {
+    state.setSettingsPanelOpen(false)
+    return true
+  }
+
   // 3. Close marketplace
   if (state.marketplaceOpen) {
     state.toggleMarketplace()

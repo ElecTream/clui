@@ -182,6 +182,13 @@ function useActions(closePalette: () => void): PaletteAction[] {
       group: 'View',
       run: wrap(() => useSessionStore.getState().toggleHistoryPicker()),
     })
+    actions.push({
+      id: 'view-settings',
+      label: 'Open Settings',
+      hint: 'theme · sound · claude config',
+      group: 'View',
+      run: wrap(() => useSessionStore.getState().toggleSettingsPanel()),
+    })
 
     // ─── Theme ───
     const themes: Array<{ id: ThemeMode; label: string }> = [

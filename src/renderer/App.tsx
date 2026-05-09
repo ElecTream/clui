@@ -7,6 +7,7 @@ import { InputBar, type InputBarHandle } from './components/InputBar'
 import { StatusBar } from './components/StatusBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { SearchPanel } from './components/SearchPanel'
+import { SettingsPanel } from './components/SettingsPanel'
 import { BtwBubble } from './components/BtwBubble'
 import { CommandPalette } from './components/CommandPalette'
 import { PopoverLayerProvider } from './components/PopoverLayer'
@@ -115,6 +116,7 @@ export default function App() {
   const isExpanded = useSessionStore((s) => s.isExpanded)
   const marketplaceOpen = useSessionStore((s) => s.marketplaceOpen)
   const searchPanelOpen = useSessionStore((s) => s.searchPanelOpen)
+  const settingsPanelOpen = useSessionStore((s) => s.settingsPanelOpen)
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
   const inputBarRef = useRef<InputBarHandle>(null)
 
@@ -242,6 +244,27 @@ export default function App() {
                     <SearchPanel />
                   </div>
                 </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Phase F — Settings panel. Same anchored-overlay pattern as
+              MarketplacePanel / SearchPanel. */}
+          <AnimatePresence initial={false}>
+            {settingsPanelOpen && (
+              <div
+                data-clui-ui
+                style={{
+                  width: 640,
+                  maxWidth: 640,
+                  marginLeft: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: 14,
+                  position: 'relative',
+                  zIndex: 30,
+                }}
+              >
+                <SettingsPanel />
               </div>
             )}
           </AnimatePresence>
