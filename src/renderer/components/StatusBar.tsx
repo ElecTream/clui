@@ -72,15 +72,16 @@ export function ModelPicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors"
+        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors whitespace-nowrap flex-shrink-0"
         style={{
           color: colors.textTertiary,
           cursor: isBusy ? 'not-allowed' : 'pointer',
+          maxWidth: 140,
         }}
-        title={isBusy ? 'Stop the task to change model' : 'Switch model'}
+        title={isBusy ? 'Stop the task to change model' : `Switch model · ${activeLabel}`}
       >
-        {activeLabel}
-        <CaretDown size={10} style={{ opacity: 0.6 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeLabel}</span>
+        <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
       </button>
 
       {popoverLayer && open && createPortal(
@@ -195,7 +196,7 @@ export function PermissionModePicker() {
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors"
+        className="flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 transition-colors whitespace-nowrap flex-shrink-0"
         style={{
           color: colors.textTertiary,
           cursor: 'pointer',
@@ -204,7 +205,7 @@ export function PermissionModePicker() {
       >
         <ShieldCheck size={11} weight={isAuto ? 'fill' : 'regular'} />
         {isAuto ? 'Auto' : 'Ask'}
-        <CaretDown size={10} style={{ opacity: 0.6 }} />
+        <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
       </button>
 
       {popoverLayer && open && createPortal(

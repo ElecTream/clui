@@ -1,72 +1,47 @@
-import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
+import { useEffect, type MutableRefObject, type RefObject } from 'react'
 
 /**
- * useWindowDrag — Phase 0.2 (Major Upgrade plan)
+ * useWindowDrag — Phase 0.1 stage 2d rewrite.
  *
- * Wires a frameless overlay window's drag behavior on Windows / Linux. macOS
- * could in theory rely on `-webkit-app-region: drag`, but the existing
- * Electron build uses `transparent: true` + `frame: false` + `setIgnoreMouseEvents`
- * + per-element click-through, which makes the native CSS region unreliable
- * (the OS sees a partially-transparent client area and refuses to start a
- * non-client drag). Instead we capture mousedown ourselves and stream
- * `movementX / movementY` deltas to the main process via
- * `window.clui.startWindowDrag(dx, dy)`. The IPC handler in `main/index.ts`
- * does `setPosition(current + delta)` and clamps to the work area.
+ * Earlier the hook tracked relative `movementX/Y` and streamed deltas to
+ * main. Two failure modes surfaced:
+ *  1. Crossing monitors with different DPI scales caused `movementX`
+ *     values to be in mismatched coord systems for one or two events,
+ *     producing an instantaneous jump where the pill "shot off into the
+ *     distance" and effectively had to be reopened.
+ *  2. If the cursor briefly left the window mid-drag (transparent +
+ *     setIgnoreMouseEvents region), no further mousemoves arrived and
+ *     the drag stalled — felt like the pill couldn't move very far.
  *
- * The hook attaches to a single ref. The element receives drag IFF the
- * pointerdown target is the element itself or a descendant marked with
- * `data-clui-drag="true"` AND no ancestor up to the element is marked
- * `data-clui-no-drag="true"` (so buttons, inputs, dropdowns inside the
- * drag area opt out without prop drilling).
+ * The rewrite uses absolute screen coordinates and pointer capture:
+ *  - `setPointerCapture` keeps move events flowing even if the cursor
+ *    leaves the window or hovers a transparent region.
+ *  - On pointerdown we record the cursor's screen position and the
+ *    window's screen position once. Every subsequent pointermove
+ *    computes `target = initialWindowPos + (currentScreenPos -
+ *    initialScreenPos)` — a single absolute target. No accumulation,
+ *    no per-event drift.
+ *  - Main clamps the target to the union of all displays + a 60px
+ *    on-screen margin, so the pill can roam across monitors freely but
+ *    can't be lost off the edge.
  *
- * Usage:
- *   const ref = useRef<HTMLDivElement>(null)
- *   useWindowDrag(ref)
- *   <div ref={ref} data-clui-drag="true" />
- *
- * Children that should NOT drag the window:
- *   <button data-clui-no-drag="true" ...>
+ * The hook still bails out on common interactive descendants
+ * (button / input / textarea / select / a / contenteditable) and on
+ * any explicit `data-clui-no-drag="true"` ancestor.
  */
 export function useWindowDrag(
   ref: RefObject<HTMLElement> | MutableRefObject<HTMLElement | null>,
 ): void {
-  const dragStateRef = useRef<{ dragging: boolean; pendingX: number; pendingY: number; rafId: number | null }>(
-    { dragging: false, pendingX: 0, pendingY: 0, rafId: null },
-  )
-
   useEffect(() => {
     const el = ref.current
     if (!el) return
 
-    const flushDrag = (): void => {
-      const state = dragStateRef.current
-      state.rafId = null
-      if (!state.dragging) return
-      if (state.pendingX === 0 && state.pendingY === 0) return
-      const dx = state.pendingX
-      const dy = state.pendingY
-      state.pendingX = 0
-      state.pendingY = 0
-      try {
-        window.clui?.startWindowDrag?.(dx, dy)
-      } catch {
-        // IPC not available (e.g. in browser preview) — silently drop
-      }
-    }
-
-    const scheduleFlush = (): void => {
-      const state = dragStateRef.current
-      if (state.rafId !== null) return
-      state.rafId = requestAnimationFrame(flushDrag)
-    }
-
-    const onMouseDown = (e: MouseEvent): void => {
-      // Left button only
+    const onPointerDown = (e: PointerEvent): void => {
+      // Left button only (button === 0 on pointerdown).
       if (e.button !== 0) return
 
-      // Walk up from target to host: bail if any ancestor is marked no-drag
-      // (buttons, inputs, dropdowns). Check both data-clui-no-drag and
-      // common interactive elements as a belt-and-suspenders fallback.
+      // Walk up from target to host: bail if any ancestor is marked
+      // no-drag (textareas, buttons, dropdowns).
       let node: HTMLElement | null = e.target as HTMLElement | null
       while (node && node !== el) {
         if (node.dataset.cluiNoDrag === 'true') return
@@ -84,48 +59,76 @@ export function useWindowDrag(
         node = node.parentElement
       }
 
-      // Begin drag
-      const state = dragStateRef.current
-      state.dragging = true
-      state.pendingX = 0
-      state.pendingY = 0
+      // Capture pointer so move/up keep firing even when the cursor
+      // leaves the (transparent) window or hovers a click-through zone.
+      try {
+        el.setPointerCapture(e.pointerId)
+      } catch {
+        // ignore — fall back to bubbled events
+      }
 
-      // Prevent default to avoid text selection / focus shifts during drag
+      const initialScreenX = e.screenX
+      const initialScreenY = e.screenY
+      // window.screenX/Y is the OS-level outer position of the renderer
+      // window in screen coordinates (CSS pixels). For a frameless
+      // transparent window this is identical to the BrowserWindow's
+      // x/y on every platform we ship to.
+      const initialWindowX = window.screenX
+      const initialWindowY = window.screenY
+
+      // Prevent text selection / focus shifts during drag.
       e.preventDefault()
 
-      const onMouseMove = (mv: MouseEvent): void => {
-        if (!state.dragging) return
-        // Use movementX/Y (relative deltas) to avoid drift from the window
-        // moving out from under the cursor between events
-        state.pendingX += mv.movementX
-        state.pendingY += mv.movementY
-        scheduleFlush()
-      }
+      let lastSentX = initialWindowX
+      let lastSentY = initialWindowY
+      let rafScheduled = false
+      let pendingX = lastSentX
+      let pendingY = lastSentY
 
-      const onMouseUp = (): void => {
-        state.dragging = false
-        if (state.rafId !== null) {
-          cancelAnimationFrame(state.rafId)
-          state.rafId = null
+      const flush = (): void => {
+        rafScheduled = false
+        if (pendingX === lastSentX && pendingY === lastSentY) return
+        lastSentX = pendingX
+        lastSentY = pendingY
+        try {
+          window.clui?.moveWindowTo?.(pendingX, pendingY)
+        } catch {
+          // Renderer not connected (e.g. browser preview) — drop silently
         }
-        document.removeEventListener('mousemove', onMouseMove)
-        document.removeEventListener('mouseup', onMouseUp)
-        document.removeEventListener('mouseleave', onMouseUp)
       }
 
-      document.addEventListener('mousemove', onMouseMove)
-      document.addEventListener('mouseup', onMouseUp)
-      document.addEventListener('mouseleave', onMouseUp)
+      const onPointerMove = (mv: PointerEvent): void => {
+        // Absolute target: where would the window be if we shift it by
+        // exactly the cursor's screen-space delta since pointerdown?
+        // No drift across monitor crossings because both coords are in
+        // the same virtual-screen system.
+        pendingX = initialWindowX + (mv.screenX - initialScreenX)
+        pendingY = initialWindowY + (mv.screenY - initialScreenY)
+        if (!rafScheduled) {
+          rafScheduled = true
+          requestAnimationFrame(flush)
+        }
+      }
+
+      const cleanup = (): void => {
+        el.removeEventListener('pointermove', onPointerMove)
+        el.removeEventListener('pointerup', cleanup)
+        el.removeEventListener('pointercancel', cleanup)
+        try {
+          el.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+      }
+
+      el.addEventListener('pointermove', onPointerMove)
+      el.addEventListener('pointerup', cleanup)
+      el.addEventListener('pointercancel', cleanup)
     }
 
-    el.addEventListener('mousedown', onMouseDown)
+    el.addEventListener('pointerdown', onPointerDown)
     return () => {
-      el.removeEventListener('mousedown', onMouseDown)
-      const state = dragStateRef.current
-      if (state.rafId !== null) {
-        cancelAnimationFrame(state.rafId)
-        state.rafId = null
-      }
+      el.removeEventListener('pointerdown', onPointerDown)
     }
   }, [ref])
 }

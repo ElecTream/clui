@@ -87,8 +87,10 @@ export interface CluiAPI {
   isVisible(): Promise<boolean>
   /** OS-level click-through for transparent window regions */
   setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): void
-  /** Manual window drag for frameless windows */
+  /** Manual window drag for frameless windows (delta-based, legacy) */
   startWindowDrag(deltaX: number, deltaY: number): void
+  /** Move the pill to absolute screen coords (preferred drag path) */
+  moveWindowTo(x: number, y: number): void
   /** Reset overlay to its default bottom-center position */
   resetWindowPosition(): void
   /** Show the full-screen snap grid overlay window */
@@ -207,6 +209,7 @@ const api: CluiAPI = {
     ipcRenderer.send(IPC.SET_IGNORE_MOUSE_EVENTS, ignore, options || {}),
   startWindowDrag: (deltaX, deltaY) =>
     ipcRenderer.send(IPC.START_WINDOW_DRAG, deltaX, deltaY),
+  moveWindowTo: (x, y) => ipcRenderer.send(IPC.WINDOW_MOVE_TO, x, y),
   resetWindowPosition: () => ipcRenderer.send(IPC.RESET_WINDOW_POSITION),
   showSnapGrid: () => ipcRenderer.send(IPC.SHOW_SNAP_GRID),
   hideSnapGrid: () => ipcRenderer.send(IPC.HIDE_SNAP_GRID),

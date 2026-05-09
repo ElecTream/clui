@@ -385,13 +385,20 @@ export default function App() {
             {/* Input pill — chrome around the InputBar is drag-active. The
                 InputBar itself contains a textarea + buttons that opt out via
                 the useWindowDrag bail-out (textareas / buttons / inputs are
-                excluded from the drag walk). */}
+                excluded from the drag walk). Generous vertical padding so
+                there's a visible drag-active strip above + below the textarea
+                — the user can grab the pill from any of that empty surface. */}
             <div
               ref={inputDragRef}
               data-clui-ui
               data-clui-drag="true"
               className="glass-surface w-full"
-              style={{ minHeight: 50, borderRadius: 25, padding: '0 6px 0 16px', background: colors.inputPillBg }}
+              style={{
+                minHeight: 60,
+                borderRadius: 30,
+                padding: '6px 10px 6px 18px',
+                background: colors.inputPillBg,
+              }}
             >
               <InputBar ref={inputBarRef} />
             </div>

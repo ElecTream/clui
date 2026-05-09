@@ -877,6 +877,42 @@ ipcMain.on(IPC.START_WINDOW_DRAG, (event, deltaX: number, deltaY: number) => {
   }
 })
 
+/**
+ * Absolute-position drag (pointer-event based). Renderer computes the
+ * target window position from screen-coordinate cursor deltas and sends
+ * a single absolute (x, y). Main clamps to the union of all displays
+ * with a small on-screen margin so the pill can roam multi-monitor but
+ * can't be lost. No accumulation, no DPI-mismatch jump on monitor cross.
+ */
+ipcMain.on(IPC.WINDOW_MOVE_TO, (event, x: number, y: number) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed()) return
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
+  const current = win.getBounds()
+
+  const ON_SCREEN_MARGIN = 60
+  const displays = screen.getAllDisplays()
+  let unionLeft = Infinity, unionTop = Infinity, unionRight = -Infinity, unionBottom = -Infinity
+  for (const d of displays) {
+    const wa = d.workArea
+    if (wa.x < unionLeft) unionLeft = wa.x
+    if (wa.y < unionTop) unionTop = wa.y
+    if (wa.x + wa.width > unionRight) unionRight = wa.x + wa.width
+    if (wa.y + wa.height > unionBottom) unionBottom = wa.y + wa.height
+  }
+  // Allow the window to mostly leave a screen edge but keep ON_SCREEN_MARGIN
+  // visible so the user can always grab it back.
+  const minX = unionLeft - current.width + ON_SCREEN_MARGIN
+  const maxX = unionRight - ON_SCREEN_MARGIN
+  const minY = unionTop
+  const maxY = unionBottom - ON_SCREEN_MARGIN
+  const nextX = Math.round(Math.max(minX, Math.min(x, maxX)))
+  const nextY = Math.round(Math.max(minY, Math.min(y, maxY)))
+
+  win.setPosition(nextX, nextY)
+  if (win === mainWindow) lastWindowBounds = win.getBounds()
+})
+
 ipcMain.on(IPC.RESET_WINDOW_POSITION, () => {
   resetWindowPosition()
 })
