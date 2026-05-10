@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut, ArrowsClockwise, Copy, ArrowUpRight } from '@phosphor-icons/react'
+import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut, ArrowsClockwise, Copy, ArrowUpRight, Keyboard } from '@phosphor-icons/react'
 import { useColors, useThemeStore, type ThemeMode } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import type { ClaudeVersionInfo } from '../../shared/types'
@@ -18,7 +18,7 @@ import type { ClaudeVersionInfo } from '../../shared/types'
  * trigger button yet to keep the pill chrome uncluttered.
  */
 
-type Section = 'appearance' | 'claude' | 'about'
+type Section = 'appearance' | 'claude' | 'shortcuts' | 'about'
 
 export function SettingsPanel() {
   const open = useSessionStore((s) => s.settingsPanelOpen)
@@ -106,6 +106,13 @@ export function SettingsPanel() {
             label="Claude config"
           />
           <SidebarItem
+            active={section === 'shortcuts'}
+            onClick={() => setSection('shortcuts')}
+            colors={colors}
+            icon={<Keyboard size={13} />}
+            label="Shortcuts"
+          />
+          <SidebarItem
             active={section === 'about'}
             onClick={() => setSection('about')}
             colors={colors}
@@ -125,6 +132,7 @@ export function SettingsPanel() {
         >
           {section === 'appearance' && <AppearanceSection />}
           {section === 'claude' && <ClaudeConfigSection />}
+          {section === 'shortcuts' && <ShortcutsSection />}
           {section === 'about' && <AboutSection />}
         </div>
       </div>
@@ -394,6 +402,128 @@ function ClaudeConfigSection() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ─── Shortcuts ───
+
+/**
+ * Read-only keyboard shortcut viewer (Phase 0.5). Shows the actual
+ * bindings hard-coded in useKeyboardShortcuts.ts so the user can
+ * discover them without reading source. Rebinding UI is deferred until
+ * the keymap is refactored to a data-driven map.
+ *
+ * The shortcuts here MUST match the handler in
+ * src/renderer/hooks/useKeyboardShortcuts.ts. If you add a new binding
+ * there, mirror it in this list.
+ */
+function ShortcutsSection() {
+  const colors = useColors()
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const Mod = isMac ? '⌘' : 'Ctrl'
+
+  const groups: Array<{ heading: string; rows: Array<[string, string]> }> = [
+    {
+      heading: 'Tabs',
+      rows: [
+        [`${Mod}+N`, 'New tab (default directory)'],
+        [`${Mod}+T`, 'New tab in same folder'],
+        [`${Mod}+W`, 'Close current tab'],
+        [`${Mod}+Shift+T`, 'Reopen last closed tab'],
+        [`${Mod}+Shift+]`, 'Next tab'],
+        [`${Mod}+Shift+[`, 'Previous tab'],
+        [`${isMac ? '⌃' : 'Ctrl'}+Tab`, 'Cycle permission mode'],
+      ],
+    },
+    {
+      heading: 'Conversation',
+      rows: [
+        [`${Mod}+L`, 'Focus input'],
+        [`Space`, 'Focus input (when nothing else has focus)'],
+        [`${Mod}+K`, 'Clear conversation'],
+        [`${Mod}+.`, 'Stop active run'],
+        [`${Mod}+Shift+C`, 'Copy last response'],
+      ],
+    },
+    {
+      heading: 'Overlay',
+      rows: [
+        [`${Mod}+E`, 'Expand / collapse'],
+        [`${Mod}+M`, 'Minimize (collapse)'],
+        [`${Mod}+Space`, 'Open command palette'],
+        [`Esc`, 'Cascading dismiss (cancel run → close palette → ...)'],
+      ],
+    },
+    {
+      heading: 'Tools & input',
+      rows: [
+        [`${Mod}+Shift+P`, 'Open slash command palette'],
+        [`${Mod}+Shift+M`, 'Toggle skills marketplace'],
+        [`${Mod}+Shift+F`, 'Toggle search panel'],
+        [`${Mod}+Shift+H`, 'Toggle session history'],
+        [`${Mod}+Shift+A`, 'Attach file'],
+        [`${Mod}+Shift+S`, 'Take screenshot'],
+        [`${Mod}+Shift+V`, 'Voice capture'],
+      ],
+    },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div>
+        <div style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 500 }}>Shortcuts</div>
+        <div style={{ color: colors.textTertiary, fontSize: 11, marginTop: 3 }}>
+          Read-only for now — rebinding UI is on the way once the keymap is data-driven.
+        </div>
+      </div>
+
+      {groups.map((group) => (
+        <div key={group.heading}>
+          <div
+            style={{
+              color: colors.textTertiary,
+              fontSize: 10,
+              fontWeight: 500,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: 6,
+            }}
+          >
+            {group.heading}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {group.rows.map(([keys, label]) => (
+              <div
+                key={keys}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '5px 0',
+                  borderBottom: `1px solid ${colors.containerBorder}`,
+                  fontSize: 12,
+                }}
+              >
+                <span style={{ color: colors.textPrimary }}>{label}</span>
+                <kbd
+                  style={{
+                    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                    fontSize: 11,
+                    background: colors.surfaceActive,
+                    color: colors.textSecondary,
+                    border: `1px solid ${colors.containerBorder}`,
+                    borderRadius: 'var(--clui-radius-sm, 6px)',
+                    padding: '2px 7px',
+                  }}
+                >
+                  {keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -1,6 +1,5 @@
 import { useEffect, useCallback } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
-import { openInPreferredTerminal } from '../utils/terminal'
 
 /**
  * Cycle the permission mode in a fixed order. Today the store only supports
@@ -215,6 +214,13 @@ export function useKeyboardShortcuts({
         return
       }
 
+      // ─── primary + Shift + T — Reopen most-recently closed tab (Phase 0.5) ───
+      if (primary && shift && key === 't') {
+        e.preventDefault()
+        void useSessionStore.getState().reopenLastClosedTab()
+        return
+      }
+
       // ─── primary + Shift + ] — Next tab ───
       if (primary && shift && key === ']') {
         e.preventDefault()
@@ -300,16 +306,9 @@ export function useKeyboardShortcuts({
         return
       }
 
-      // ─── primary + Shift + T — Open in Terminal ───
-      if (primary && shift && key === 't') {
-        e.preventDefault()
-        const state = useSessionStore.getState()
-        const tab = state.tabs.find((t) => t.id === state.activeTabId)
-        if (tab) {
-          openInPreferredTerminal(tab.claudeSessionId, tab.workingDirectory)
-        }
-        return
-      }
+      // (Open in Terminal removed from Ctrl+Shift+T in Phase 0.5 — that
+      //  shortcut now reopens the last-closed tab, matching browser
+      //  convention. Use the "Open in CLI" pill button instead.)
 
       // ─── primary + Shift + V — Voice capture ───
       if (primary && shift && key === 'v') {

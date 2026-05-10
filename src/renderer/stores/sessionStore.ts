@@ -68,6 +68,18 @@ interface StaticInfo {
   homePath: string
 }
 
+/** Phase 0.5 — snapshot saved when a tab is closed, used to reopen via
+ *  Ctrl+Shift+T. Just enough to recreate the tab with its working dir
+ *  and title. We deliberately don't try to resume the conversation: the
+ *  user's mental model is "I made a mistake closing that, give me a
+ *  fresh tab in the same place". Resuming sessions stays on /history. */
+export interface ClosedTabSnapshot {
+  workingDirectory: string
+  hasChosenDirectory: boolean
+  title: string
+  closedAt: number
+}
+
 interface State {
   tabs: TabState[]
   activeTabId: string
@@ -129,6 +141,10 @@ interface State {
   duplicateTab: (tabId: string) => Promise<string | null>
   /** Phase D — move tab at fromIdx to toIdx (in-place reorder). */
   reorderTabs: (fromIdx: number, toIdx: number) => void
+  /** Phase 0.5 — recently-closed tab snapshots for Ctrl+Shift+T reopen. */
+  recentlyClosed: ClosedTabSnapshot[]
+  /** Phase 0.5 — pop the most recent closed tab and recreate it. */
+  reopenLastClosedTab: () => Promise<string | null>
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   clearTab: () => void
@@ -376,6 +392,7 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
   preferredModel: null,
   permissionMode: loadPermissionMode(),
   preferredEffort: loadEffort(),
+  recentlyClosed: [],
   // Phase A — model registry. Seeded with the fallback list; replaced
   // by listModels() in initStaticInfo() once main responds.
   availableModels: FALLBACK_MODELS,
@@ -818,22 +835,52 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
     window.clui.closeTab(tabId).catch(() => {})
 
     const s = get()
+    const closing = s.tabs.find((t) => t.id === tabId)
     const remaining = s.tabs.filter((t) => t.id !== tabId)
+
+    // Stash a snapshot so Ctrl+Shift+T can bring it back. Cap at 10 —
+    // anything older drops off; the closed-tab history isn't a permanent
+    // archive, just an oops-undo.
+    const snap: ClosedTabSnapshot | null = closing
+      ? {
+          workingDirectory: closing.workingDirectory,
+          hasChosenDirectory: closing.hasChosenDirectory,
+          title: closing.title,
+          closedAt: Date.now(),
+        }
+      : null
+    const nextRecent = snap ? [snap, ...s.recentlyClosed].slice(0, 10) : s.recentlyClosed
 
     if (s.activeTabId === tabId) {
       if (remaining.length === 0) {
         const newTab = makeLocalTab()
         newTab.workingDirectory = get().staticInfo?.homePath || '~'
-        set({ tabs: [newTab], activeTabId: newTab.id })
+        set({ tabs: [newTab], activeTabId: newTab.id, recentlyClosed: nextRecent })
         void ensureBackendTabRegistered(newTab.id).catch(() => {})
         return
       }
       const closedIndex = s.tabs.findIndex((t) => t.id === tabId)
       const newActive = remaining[Math.min(closedIndex, remaining.length - 1)]
-      set({ tabs: remaining, activeTabId: newActive.id })
+      set({ tabs: remaining, activeTabId: newActive.id, recentlyClosed: nextRecent })
     } else {
-      set({ tabs: remaining })
+      set({ tabs: remaining, recentlyClosed: nextRecent })
     }
+  },
+
+  reopenLastClosedTab: async () => {
+    const s = get()
+    const head = s.recentlyClosed[0]
+    if (!head) return null
+    const rest = s.recentlyClosed.slice(1)
+    set({ recentlyClosed: rest })
+    if (head.hasChosenDirectory) {
+      const tabId = await get().createTabInDirectory(head.workingDirectory)
+      if (head.title) get().renameTab(tabId, head.title)
+      return tabId
+    }
+    const tabId = await get().createTab()
+    if (head.title) get().renameTab(tabId, head.title)
+    return tabId
   },
 
   clearTab: () => {
