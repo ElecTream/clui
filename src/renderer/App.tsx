@@ -9,6 +9,7 @@ import { SearchPanel } from './components/SearchPanel'
 import { SettingsPanel } from './components/SettingsPanel'
 import { BtwBubble } from './components/BtwBubble'
 import { CommandPalette } from './components/CommandPalette'
+import { OnboardingModal } from './components/OnboardingModal'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
@@ -379,6 +380,9 @@ export default function App() {
       {/* Phase 0.5b — Command Palette (Ctrl+Space). Rendered via portal so it
           floats above the pill regardless of expanded/collapsed state. */}
       <CommandPalette />
+      {/* Phase I — first-launch onboarding. Self-suppresses on subsequent
+          runs via localStorage. */}
+      <OnboardingModal />
     </PopoverLayerProvider>
   )
 }
