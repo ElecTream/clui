@@ -466,20 +466,22 @@ function CardIconButton({
   title: string
   icon: React.ReactNode
 }) {
+  // Uses .clui-icon-btn for the 28px hit zone (Phase 0.3 audit). The
+  // visible icon is smaller; the hit-zone catches clicks slightly off
+  // the icon. Background applied inline so it stands out from the card.
   const colors = useColors()
   return (
     <button
       onClick={onClick}
       title={title}
+      className="clui-icon-btn"
       style={{
         background: colors.surfacePrimary,
         border: `1px solid ${colors.containerBorder}`,
-        color: colors.textTertiary,
-        cursor: 'pointer',
-        padding: 3,
-        borderRadius: 4,
-        display: 'flex',
-        alignItems: 'center',
+        // Icon-btn defaults to 28×28; for in-card use a touch smaller
+        // so the cluster doesn't overwhelm the card content.
+        width: 24,
+        height: 24,
       }}
     >
       {icon}
@@ -762,17 +764,14 @@ function FocusedChat({ tab, onBack }: { tab: TabState; onBack: () => void }) {
         <button
           onClick={onBack}
           title="Back to chats"
+          className="clui-icon-btn"
           style={{
-            background: 'transparent',
-            border: 'none',
-            color: colors.textTertiary,
-            cursor: 'pointer',
-            padding: '4px 6px',
-            borderRadius: 'var(--clui-radius-sm, 6px)',
-            fontSize: 11,
-            display: 'flex',
-            alignItems: 'center',
+            // Wider than 28×28 because there's a label next to the icon.
+            width: 'auto',
+            paddingLeft: 8,
+            paddingRight: 8,
             gap: 4,
+            fontSize: 11,
           }}
         >
           <ArrowLeft size={11} />
@@ -794,17 +793,13 @@ function FocusedChat({ tab, onBack }: { tab: TabState; onBack: () => void }) {
         <button
           onClick={() => { void window.clui.popoutTab?.(tab.id).catch(() => {}) }}
           title="Pop this chat into its own window"
+          className="clui-icon-btn"
           style={{
-            background: 'transparent',
-            border: 'none',
-            color: colors.textTertiary,
-            cursor: 'pointer',
-            padding: '4px 6px',
-            borderRadius: 'var(--clui-radius-sm, 6px)',
-            fontSize: 11,
-            display: 'flex',
-            alignItems: 'center',
+            width: 'auto',
+            paddingLeft: 8,
+            paddingRight: 8,
             gap: 4,
+            fontSize: 11,
           }}
         >
           <ArrowsOutCardinal size={11} />

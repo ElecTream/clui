@@ -160,16 +160,8 @@ function Shell({
           data-clui-no-drag="true"
           onClick={() => window.clui.closePopout?.().catch(() => {})}
           title="Close pop-out"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: colors.textTertiary,
-            cursor: 'pointer',
-            padding: 4,
-            borderRadius: 4,
-            display: 'flex',
-            alignItems: 'center',
-          }}
+          className="clui-icon-btn"
+          style={{ width: 24, height: 24 }}
         >
           <X size={12} />
         </button>
