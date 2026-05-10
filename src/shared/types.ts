@@ -629,6 +629,11 @@ export const IPC = {
   PEER_GENERATE_SECRET: 'clui:peer-generate-secret',
   PEER_GET_LOCAL_INFO: 'clui:peer-get-local-info',
   PEER_LIST_TAILSCALE_PEERS: 'clui:peer-list-tailscale-peers',
+  /** Phase H follow-up — saved peers (hostname + secret) so the user
+   *  doesn't paste the secret on every connect. */
+  PEER_LIST_SAVED: 'clui:peer-list-saved',
+  PEER_SAVE: 'clui:peer-save',
+  PEER_REMOVE_SAVED: 'clui:peer-remove-saved',
 
   // Phase D follow-up — per-tab pop-out viewport. Each pop-out is a
   // BrowserWindow loading the same renderer with `?window=popout&tabId=X`,

@@ -27,6 +27,7 @@ import type {
   PeerServerState,
   PeerImportRequest,
   DiscoveredPeer,
+  SavedPeer,
   PillAction,
   PillActionResult,
 } from '../shared/types'
@@ -100,6 +101,12 @@ export interface CluiAPI {
   peerGenerateSecret(): Promise<PeerServerState>
   peerListSessions(args: { hostname: string; secret: string; port?: number }): Promise<PeerSessionMeta[]>
   peerListTailscalePeers(): Promise<DiscoveredPeer[]>
+
+  /** Phase H follow-up: saved peers (hostname + secret) so the user
+   *  doesn't paste the secret every connect. */
+  peerListSaved(): Promise<SavedPeer[]>
+  peerSave(peer: SavedPeer): Promise<SavedPeer[]>
+  peerRemoveSaved(hostname: string): Promise<SavedPeer[]>
 
   // ─── Per-tab pop-out viewports ───
   popoutTab(tabId: string): Promise<void>
@@ -258,6 +265,9 @@ const api: CluiAPI = {
   peerGenerateSecret: () => ipcRenderer.invoke(IPC.PEER_GENERATE_SECRET),
   peerListSessions: (args) => ipcRenderer.invoke(IPC.PEER_LIST_SESSIONS, args),
   peerListTailscalePeers: () => ipcRenderer.invoke(IPC.PEER_LIST_TAILSCALE_PEERS),
+  peerListSaved: () => ipcRenderer.invoke(IPC.PEER_LIST_SAVED),
+  peerSave: (peer: SavedPeer) => ipcRenderer.invoke(IPC.PEER_SAVE, peer),
+  peerRemoveSaved: (hostname: string) => ipcRenderer.invoke(IPC.PEER_REMOVE_SAVED, hostname),
 
   popoutTab: (tabId: string) => ipcRenderer.invoke(IPC.POPOUT_TAB, tabId),
   closePopout: (tabId?: string) => ipcRenderer.invoke(IPC.CLOSE_POPOUT, tabId),

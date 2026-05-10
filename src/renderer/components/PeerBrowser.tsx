@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { GlobeHemisphereWest, Power, Copy, ArrowsClockwise, ArrowDown, Warning } from '@phosphor-icons/react'
+import { GlobeHemisphereWest, Power, Copy, ArrowsClockwise, ArrowDown, Warning, FloppyDisk, Trash } from '@phosphor-icons/react'
 import { useColors } from '../theme'
-import type { PeerServerState, PeerSessionMeta, DiscoveredPeer } from '../../shared/types'
+import type { PeerServerState, PeerSessionMeta, DiscoveredPeer, SavedPeer } from '../../shared/types'
 
 /**
  * PeerBrowser — Phase H (cross-machine session resume via Tailscale).
@@ -29,6 +29,7 @@ export function PeerBrowser() {
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [copiedSecret, setCopiedSecret] = useState(false)
   const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([])
+  const [savedPeers, setSavedPeers] = useState<SavedPeer[]>([])
 
   useEffect(() => {
     void refreshLocal()
@@ -43,6 +44,32 @@ export function PeerBrowser() {
       if (peers) setDiscoveredPeers(peers)
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    void window.clui.peerListSaved?.().then((peers) => {
+      if (peers) setSavedPeers(peers)
+    }).catch(() => {})
+  }, [])
+
+  const onSaveCurrentPeer = async (): Promise<void> => {
+    if (!peerHost || !peerSecret) return
+    const next = await window.clui.peerSave?.({
+      hostname: peerHost,
+      secret: peerSecret,
+      lastSeen: Date.now(),
+    })
+    if (next) setSavedPeers(next)
+  }
+  const onLoadSavedPeer = (peer: SavedPeer): void => {
+    setPeerHost(peer.hostname)
+    setPeerSecret(peer.secret)
+    setSessions(null)
+    setError(null)
+  }
+  const onRemoveSavedPeer = async (hostname: string): Promise<void> => {
+    const next = await window.clui.peerRemoveSaved?.(hostname)
+    if (next) setSavedPeers(next)
+  }
 
   const refreshLocal = async (): Promise<void> => {
     try {
@@ -95,6 +122,16 @@ export function PeerBrowser() {
     try {
       const list = await window.clui.peerListSessions?.({ hostname: peerHost, secret: peerSecret })
       setSessions(list ?? [])
+      // If this peer is already saved, refresh its lastSeen so the user
+      // can tell which peer is reachable. Doesn't auto-save unsaved peers.
+      if (savedPeers.some((p) => p.hostname === peerHost)) {
+        const next = await window.clui.peerSave?.({
+          hostname: peerHost,
+          secret: peerSecret,
+          lastSeen: Date.now(),
+        })
+        if (next) setSavedPeers(next)
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to reach peer')
     } finally {
@@ -217,7 +254,27 @@ export function PeerBrowser() {
             />
           </Field>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+          <button
+            onClick={() => { void onSaveCurrentPeer() }}
+            disabled={!peerHost || !peerSecret}
+            title="Save this peer for next time"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${colors.containerBorder}`,
+              color: !peerHost || !peerSecret ? colors.textTertiary : colors.textPrimary,
+              borderRadius: 'var(--clui-radius-sm, 6px)',
+              fontSize: 11,
+              padding: '6px 10px',
+              cursor: !peerHost || !peerSecret ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <FloppyDisk size={11} />
+            Save
+          </button>
           <button
             onClick={onListPeer}
             disabled={!peerHost || !peerSecret || busy}
@@ -292,6 +349,67 @@ export function PeerBrowser() {
           </div>
         )}
       </SectionCard>
+
+      {savedPeers.length > 0 && (
+        <SectionCard colors={colors} title={`Saved peers (${savedPeers.length})`}>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {savedPeers.map((p) => (
+              <li
+                key={p.hostname}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 8px',
+                  background: colors.surfacePrimary,
+                  border: `1px solid ${colors.containerBorder}`,
+                  borderRadius: 'var(--clui-radius-sm, 6px)',
+                  fontSize: 11,
+                }}
+              >
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: colors.textPrimary }}>
+                  {p.label || p.hostname}
+                  {p.lastSeen && (
+                    <span style={{ color: colors.textTertiary, marginLeft: 8 }}>
+                      · last seen {new Date(p.lastSeen).toLocaleDateString()}
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={() => onLoadSavedPeer(p)}
+                  title="Load this peer's hostname + secret into the form"
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${colors.containerBorder}`,
+                    color: colors.textPrimary,
+                    borderRadius: 4,
+                    fontSize: 10,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Use
+                </button>
+                <button
+                  onClick={() => { void onRemoveSavedPeer(p.hostname) }}
+                  title="Remove from saved peers"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: colors.textTertiary,
+                    cursor: 'pointer',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Trash size={11} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      )}
 
       {error && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: colors.statusError, fontSize: 11 }}>

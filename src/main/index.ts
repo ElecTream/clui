@@ -1562,6 +1562,20 @@ ipcMain.handle(IPC.PEER_LIST_TAILSCALE_PEERS, async () => {
   return listTailscalePeers()
 })
 
+// ─── Phase H follow-up: saved peers list ───
+ipcMain.handle(IPC.PEER_LIST_SAVED, async () => {
+  const { listSavedPeers } = await import('./cross-machine/saved-peers.js')
+  return listSavedPeers()
+})
+ipcMain.handle(IPC.PEER_SAVE, async (_e, peer: import('../shared/types').SavedPeer) => {
+  const { saveSavedPeer } = await import('./cross-machine/saved-peers.js')
+  return saveSavedPeer(peer)
+})
+ipcMain.handle(IPC.PEER_REMOVE_SAVED, async (_e, hostname: string) => {
+  const { removeSavedPeer } = await import('./cross-machine/saved-peers.js')
+  return removeSavedPeer(hostname)
+})
+
 ipcMain.handle(IPC.PEER_IMPORT_SESSION, async (_e, args: import('../shared/types').PeerImportRequest) => {
   await importPeerSession(
     { hostname: args.hostname, secret: args.secret, port: args.port },
