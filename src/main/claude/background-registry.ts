@@ -29,8 +29,10 @@ import type {
 } from '../../shared/types'
 import type { ControlPlane } from './control-plane'
 import * as crypto from 'node:crypto'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { EventEmitter } from 'node:events'
-import { powerMonitor } from 'electron'
+import { app, powerMonitor } from 'electron'
 
 interface ActiveAgent {
   record: BackgroundAgentRecord
@@ -47,6 +49,12 @@ export class BackgroundAgentRegistry extends EventEmitter {
   private agents = new Map<string, ActiveAgent>()
   private controlPlane: ControlPlane
   private suspendListenersBound = false
+  /** Records of agents that have already finished (or were interrupted by
+   *  a previous quit). Persisted alongside live agents so the user has a
+   *  visible "stopped, partial" entry next launch instead of the agent
+   *  silently disappearing. Capped at HISTORY_LIMIT to keep the file small. */
+  private history: BackgroundAgentRecord[] = []
+  private static readonly HISTORY_LIMIT = 30
 
   constructor(controlPlane: ControlPlane) {
     super()
@@ -75,6 +83,58 @@ export class BackgroundAgentRegistry extends EventEmitter {
     })
 
     this.bindSuspendListeners()
+    this.rehydrateFromDisk()
+  }
+
+  /**
+   * Read the persisted JSON on construction. Live agents from a previous
+   * run that were still 'running' at quit time are converted to 'failed'
+   * with reason 'interrupted by app quit' — they can't actually still be
+   * running because their child process died with the app.
+   */
+  private rehydrateFromDisk(): void {
+    const filePath = this.persistPath()
+    try {
+      if (!fs.existsSync(filePath)) return
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+        history?: BackgroundAgentRecord[]
+        live?: BackgroundAgentRecord[]
+      }
+      const fromHistory = raw.history ?? []
+      const interrupted: BackgroundAgentRecord[] = (raw.live ?? []).map((rec) => ({
+        ...rec,
+        status: 'failed' as const,
+        finishedAt: rec.finishedAt ?? Date.now(),
+        failureReason: 'interrupted by app quit',
+      }))
+      this.history = [...interrupted, ...fromHistory].slice(0, BackgroundAgentRegistry.HISTORY_LIMIT)
+    } catch {
+      // Corrupted file shouldn't block app startup. Wipe and move on.
+      try { fs.unlinkSync(filePath) } catch { /* ignore */ }
+      this.history = []
+    }
+  }
+
+  private persistPath(): string {
+    return path.join(app.getPath('userData'), 'background-agents.json')
+  }
+
+  /**
+   * Atomic write — tmp file + rename. Keeps the JSON valid even if we crash
+   * mid-flush. Best-effort; failures are silent so a flaky disk doesn't
+   * surface as user-visible errors.
+   */
+  private flushToDisk(): void {
+    const filePath = this.persistPath()
+    const tmpPath = filePath + '.tmp'
+    const live = [...this.agents.values()].map((a) => ({ ...a.record }))
+    const payload = { history: this.history, live }
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2))
+      fs.renameSync(tmpPath, filePath)
+    } catch {
+      // ignore — persistence is nice-to-have, not load-bearing
+    }
   }
 
   private bindSuspendListeners(): void {
@@ -118,7 +178,16 @@ export class BackgroundAgentRegistry extends EventEmitter {
   }
 
   list(): BackgroundAgentRecord[] {
-    return [...this.agents.values()].map((a) => ({ ...a.record }))
+    // Live agents first (most relevant), then recent history. The renderer
+    // distinguishes by status: 'running' vs anything else.
+    const live = [...this.agents.values()].map((a) => ({ ...a.record }))
+    const liveTabIds = new Set(live.map((r) => r.tabId))
+    const recent = this.history.filter((r) => !liveTabIds.has(r.tabId))
+    return [...live, ...recent]
+  }
+
+  history_records(): BackgroundAgentRecord[] {
+    return [...this.history]
   }
 
   activeCount(): number {
@@ -163,6 +232,7 @@ export class BackgroundAgentRegistry extends EventEmitter {
       segmentStartedAt: Date.now(),
     })
     this.emit('update', record)
+    this.flushToDisk()
 
     try {
       await this.controlPlane.submitPrompt(tabId, requestId, {
@@ -222,7 +292,11 @@ export class BackgroundAgentRegistry extends EventEmitter {
     active.record.status = status
     active.record.finishedAt = Date.now()
     active.record.failureReason = failureReason
+    // Push to history immediately so the persisted file reflects the
+    // terminal state even if the user quits before the 30s eviction.
+    this.pushHistory({ ...active.record })
     this.emit('update', { ...active.record })
+    this.flushToDisk()
     // Keep the record in the map for a bit so the renderer can render
     // the final state, then evict.
     setTimeout(() => {
@@ -230,7 +304,14 @@ export class BackgroundAgentRegistry extends EventEmitter {
       if (cur && cur.record.status !== 'running') {
         this.agents.delete(tabId)
         this.emit('removed', tabId)
+        this.flushToDisk()
       }
     }, 30_000)
+  }
+
+  private pushHistory(record: BackgroundAgentRecord): void {
+    // Replace any prior entry for the same tab; otherwise prepend.
+    this.history = [record, ...this.history.filter((r) => r.tabId !== record.tabId)]
+      .slice(0, BackgroundAgentRegistry.HISTORY_LIMIT)
   }
 }
