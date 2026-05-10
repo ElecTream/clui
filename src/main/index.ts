@@ -898,7 +898,16 @@ function createHostWindow(): BrowserWindow {
     // carry the host at the *new* relative place, not the original.
     captureHostOffset()
   })
-  hostWindow.on('resized', persistBounds)
+  hostWindow.on('resized', () => {
+    persistBounds()
+    // User finished resizing — that's the new authoritative size we
+    // re-assert during pill-driven follows.
+    captureHostKnownSize()
+  })
+
+  // Initial size — captured before any pill-driven follows so the
+  // first follow has a stable size to assert.
+  captureHostKnownSize()
 
   hostWindow.on('close', (e) => {
     // Match pill behavior: "close" hides; only forceQuit truly destroys.
@@ -931,6 +940,21 @@ function createHostWindow(): BrowserWindow {
 // preferred relationship persists.
 let hostPillOffset: { dx: number; dy: number } | null = null
 
+// Authoritative host size — set on create, on user resize, never read
+// from getBounds() during a pill-driven follow. Reading getBounds()
+// mid-pill-drag was returning slightly larger values each tick on
+// Windows (DWM hadn't applied our previous setBounds yet, so
+// getBounds was reporting an in-flight intermediate); re-asserting
+// those inflated dims accumulated growth across hundreds of move
+// events. Decoupling the size from the live read fixes it.
+let hostKnownSize: { width: number; height: number } | null = null
+
+function captureHostKnownSize(): void {
+  if (!hostWindow || hostWindow.isDestroyed()) return
+  const b = hostWindow.getBounds()
+  hostKnownSize = { width: b.width, height: b.height }
+}
+
 function captureHostOffset(): void {
   if (!hostWindow || hostWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return
   const h = hostWindow.getBounds()
@@ -941,22 +965,17 @@ function captureHostOffset(): void {
 function applyHostOffsetFromPill(): void {
   if (!hostWindow || hostWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return
   if (!hostPillOffset) return
+  if (!hostKnownSize) return
   // Skip the relayout if the host is hidden — no point repositioning a
   // window the user can't see, and avoids re-show flicker if pill bounce
   // events fire while the user is mid-toggle.
   if (!hostWindow.isVisible()) return
   const p = mainWindow.getBounds()
-  const h = hostWindow.getBounds()
-  // Use setBounds (not setPosition) and re-assert width/height explicitly.
-  // setPosition can cause subtle DPR-conversion size drift when the host
-  // and pill straddle displays at different scaling factors — every
-  // 'move' tick during a pill drag would nudge the host's pixel size,
-  // appearing as the window slowly growing. setBounds locks both axes.
   hostWindow.setBounds({
     x: Math.round(p.x + hostPillOffset.dx),
     y: Math.round(p.y + hostPillOffset.dy),
-    width: h.width,
-    height: h.height,
+    width: hostKnownSize.width,
+    height: hostKnownSize.height,
   })
 }
 
