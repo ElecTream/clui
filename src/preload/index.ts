@@ -20,6 +20,7 @@ import type {
   ClaudeSettingsChangeKind,
   ClaudeVersionInfo,
   AgentMeta,
+  TabsSnapshotPayload,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -73,6 +74,10 @@ export interface CluiAPI {
   writeAgent(agent: AgentMeta): Promise<AgentMeta>
   deleteAgent(filePath: string): Promise<void>
   pathForNewAgent(name: string): Promise<string>
+
+  // ─── Phase D: cross-window tab state sync ───
+  broadcastTabsSnapshot(payload: TabsSnapshotPayload): void
+  onTabsSnapshot(callback: (payload: TabsSnapshotPayload) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
   checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
   btwPrompt(opts: BtwOptions): Promise<void>
@@ -177,6 +182,13 @@ const api: CluiAPI = {
   writeAgent: (agent) => ipcRenderer.invoke(IPC.WRITE_AGENT, agent),
   deleteAgent: (filePath) => ipcRenderer.invoke(IPC.DELETE_AGENT, filePath),
   pathForNewAgent: (name) => ipcRenderer.invoke(IPC.PATH_FOR_NEW_AGENT, name),
+  // Phase D — cross-window tab state sync
+  broadcastTabsSnapshot: (payload) => ipcRenderer.send(IPC.BROADCAST_TABS_SNAPSHOT, payload),
+  onTabsSnapshot: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: TabsSnapshotPayload) => callback(payload)
+    ipcRenderer.on(IPC.TABS_SNAPSHOT, handler)
+    return () => ipcRenderer.removeListener(IPC.TABS_SNAPSHOT, handler)
+  },
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
   triggerSearchIndex: () => ipcRenderer.send(IPC.SEARCH_BUILD_INDEX),

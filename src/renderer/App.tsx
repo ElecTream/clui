@@ -14,6 +14,7 @@ import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
 import { useSearchEvents } from './hooks/useSearchEvents'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useBroadcastTabsSnapshot } from './hooks/useTabsSync'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore, spacing } from './theme'
 import { IS_WIN } from './utils/shortcuts'
@@ -54,6 +55,10 @@ export default function App() {
   useClaudeEvents()
   useHealthReconciliation()
   useSearchEvents()
+  // Pill is the canonical owner of tab metadata — broadcast a snapshot
+  // every time tabs/activeTabId change so host (and future card)
+  // windows can mirror state for the conversation view.
+  useBroadcastTabsSnapshot()
 
   const activeTabStatus = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.status)
   const addAttachments = useSessionStore((s) => s.addAttachments)

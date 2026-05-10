@@ -3,6 +3,8 @@ import { useColors } from './theme'
 import { useThemeStore } from './theme'
 import HubShell from './components/HubShell'
 import { PopoverLayerProvider } from './components/PopoverLayer'
+import { useClaudeEvents } from './hooks/useClaudeEvents'
+import { useReceiveTabsSnapshot } from './hooks/useTabsSync'
 
 /**
  * HostApp — the host window's React root. Holds the Hub: Home, History,
@@ -10,6 +12,13 @@ import { PopoverLayerProvider } from './components/PopoverLayer'
  * "menu" content the user removed from the pill in stage 2c lives here.
  */
 export default function HostApp() {
+  // Subscribe to the same Claude event stream the pill uses. Combined
+  // with the tabs-snapshot receiver below, the host's session store
+  // mirrors the pill's tabs/messages well enough to render
+  // ConversationView in the hub.
+  useClaudeEvents()
+  useReceiveTabsSnapshot()
+
   const colors = useColors()
   const setSystemTheme = useThemeStore((s) => s.setSystemTheme)
 

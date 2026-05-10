@@ -1217,6 +1217,17 @@ import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
   })
 }).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
 
+// Phase D — tabs snapshot sync. The pill renderer broadcasts a snapshot
+// whenever its tabs/activeTabId change; main re-fans to every other
+// window so they can mirror state for the conversation view.
+ipcMain.on(IPC.BROADCAST_TABS_SNAPSHOT, (event, payload: import('../shared/types').TabsSnapshotPayload) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    if (win.webContents.id === event.sender.id) continue
+    win.webContents.send(IPC.TABS_SNAPSHOT, payload)
+  }
+})
+
 // Phase C — agents IPC. Reads/writes ~/.claude/agents/<name>.md.
 ipcMain.handle(IPC.LIST_AGENTS, async () => {
   const { listAgents } = await import('./claude/agents.js')

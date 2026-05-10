@@ -557,6 +557,13 @@ export const IPC = {
   DELETE_AGENT: 'clui:delete-agent',
   PATH_FOR_NEW_AGENT: 'clui:path-for-new-agent',
 
+  // Phase D — cross-window tab state sync. Pill is the canonical source
+  // of tab metadata; the host (and future card) renderers mirror via
+  // these snapshot broadcasts so the conversation view can render in
+  // any window.
+  BROADCAST_TABS_SNAPSHOT: 'clui:broadcast-tabs-snapshot',
+  TABS_SNAPSHOT: 'clui:tabs-snapshot',
+
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
   // transparent canvas to eliminate shadow-bleed and give the user a real
@@ -600,6 +607,22 @@ export const IPC = {
  */
 export type ClaudeSettings = Record<string, unknown>
 export type ClaudeSettingsChangeKind = 'settings' | 'claudemd'
+
+/** Phase D — minimal tab metadata broadcast across windows so non-pill
+ * windows can render the conversation list / view without owning the
+ * canonical tab state themselves. Messages and runtime state propagate
+ * via the existing event flow. */
+export interface TabSnapshot {
+  id: string
+  workingDirectory: string
+  hasChosenDirectory: boolean
+  status: TabStatus
+}
+
+export interface TabsSnapshotPayload {
+  tabs: TabSnapshot[]
+  activeTabId: string
+}
 
 /** Phase C — Subagent definition stored in ~/.claude/agents/<name>.md. */
 export interface AgentMeta {

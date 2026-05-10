@@ -12,14 +12,15 @@ import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import { SettingsPanel } from './SettingsPanel'
 import { MarketplacePanel } from './MarketplacePanel'
+import { ConversationView } from './ConversationView'
 import type { SessionMeta } from '../../shared/types'
 import { shortPath, timeAgo } from '../utils/format'
 
-type HubView = 'home' | 'history' | 'marketplace' | 'settings'
+type HubView = 'chat' | 'home' | 'history' | 'marketplace' | 'settings'
 
 export default function HubShell() {
   const colors = useColors()
-  const [view, setView] = useState<HubView>('home')
+  const [view, setView] = useState<HubView>('chat')
 
   return (
     <div
@@ -42,6 +43,7 @@ export default function HubShell() {
           background: colors.containerBg,
         }}
       >
+        {view === 'chat' && <ChatView />}
         {view === 'home' && <HomeView setView={setView} />}
         {view === 'history' && <HistoryView />}
         {view === 'marketplace' && <MarketplaceView />}
@@ -72,6 +74,12 @@ function Sidebar({
         gap: 2,
       }}
     >
+      <NavItem
+        active={view === 'chat'}
+        onClick={() => setView('chat')}
+        icon={<ChatCircleText size={14} />}
+        label="Chat"
+      />
       <NavItem
         active={view === 'home'}
         onClick={() => setView('home')}
@@ -134,6 +142,47 @@ function NavItem({
       {icon}
       {label}
     </button>
+  )
+}
+
+/* ─── Chat ─── */
+
+function ChatView() {
+  const colors = useColors()
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+
+  if (!tab) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: colors.textTertiary,
+          fontSize: 12,
+          padding: 'var(--clui-space-5)',
+          textAlign: 'center',
+        }}
+      >
+        No active conversation. Send a message from the pill to start one.
+      </div>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        background: colors.containerBg,
+      }}
+    >
+      <ConversationView />
+    </div>
   )
 }
 
