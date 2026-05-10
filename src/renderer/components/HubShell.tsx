@@ -355,10 +355,7 @@ function TabCard({
 }) {
   const colors = useColors()
   const [hover, setHover] = useState(false)
-  const lastMessage = tab.messages[tab.messages.length - 1]
-  const preview = lastMessage
-    ? extractPreview(lastMessage)
-    : tab.hasChosenDirectory ? 'No messages yet — type to start.' : 'New chat'
+  const preview = previewForTab(tab)
   const statusInfo = describeStatus(tab.status)
 
   return (
@@ -832,21 +829,31 @@ function describeStatus(status: TabState['status']): {
   }
 }
 
-function extractPreview(message: TabState['messages'][number]): string {
-  const m = message as { content?: unknown; text?: unknown; type?: unknown }
-  const direct = typeof m.text === 'string' ? m.text : null
-  if (direct) return collapse(direct)
-  if (Array.isArray(m.content)) {
-    for (const part of m.content as Array<{ type?: string; text?: string }>) {
-      if (part?.type === 'text' && typeof part.text === 'string') return collapse(part.text)
+/**
+ * Build a one-line card preview for a tab.
+ *
+ * Skips system/tool messages and walks back through the history looking
+ * for the latest meaningful exchange, prefixing with "You: " / "Claude: "
+ * so the user can tell who said what at a glance. Falls back to
+ * working-directory-based copy for empty tabs.
+ */
+function previewForTab(tab: TabState): string {
+  for (let i = tab.messages.length - 1; i >= 0; i--) {
+    const m = tab.messages[i]
+    if (m.role === 'assistant' && m.content?.trim()) {
+      return `Claude: ${collapse(m.content)}`
     }
+    if (m.role === 'user' && m.content?.trim()) {
+      return `You: ${collapse(m.content)}`
+    }
+    // Skip tool / system / empty messages — they're noise in a card.
   }
-  if (typeof m.content === 'string') return collapse(m.content)
-  return collapse(`(${String(m.type ?? 'message')})`)
+  if (tab.currentActivity) return tab.currentActivity
+  return tab.hasChosenDirectory ? 'No messages yet — type to start.' : 'New chat'
 }
 
 function collapse(s: string): string {
-  return s.replace(/\s+/g, ' ').trim().slice(0, 200)
+  return s.replace(/\s+/g, ' ').trim().slice(0, 160)
 }
 
 /* ─── Home ─── */

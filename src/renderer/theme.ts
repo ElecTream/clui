@@ -530,7 +530,12 @@ function applyTheme(variant: 'dark' | 'dark-warm' | 'light'): void {
   document.documentElement.classList.toggle('light', !isDark)
   // Set data-theme attribute for fine-grained variant-aware CSS rules
   document.documentElement.setAttribute('data-theme', variant)
-  syncTokensToCss(paletteForVariant(variant))
+  const palette = paletteForVariant(variant)
+  syncTokensToCss(palette)
+  // Persist the bg color so newly-opened host / popout windows can use it
+  // as their initial backgroundColor, eliminating the flash to default
+  // near-black on first paint in light / warm modes.
+  try { window.clui?.saveThemeBgColor?.(palette.containerBg) } catch { /* preload not yet ready */ }
 }
 
 const SETTINGS_KEY = 'clui-settings'

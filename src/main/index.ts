@@ -862,7 +862,9 @@ function createHostWindow(): BrowserWindow {
     hasShadow: true,
     show: false,
     paintWhenInitiallyHidden: false,
-    backgroundColor: '#0f0f0f',
+    // Match the renderer's last theme bg so the host doesn't flash the
+    // default near-black before React paints in light/warm modes.
+    backgroundColor: loadLastBgColor(),
     icon: join(
       __dirname,
       '../../resources',
@@ -997,6 +999,30 @@ function savePopoutBounds(tabId: string, b: HostBounds): void {
   }
 }
 
+/** Last-known theme background color, persisted by the renderer so we can
+ *  initialize new BrowserWindows with the same color and skip the flash
+ *  to the default near-black on first paint. */
+function loadLastBgColor(): string {
+  try {
+    const p = join(app.getPath('userData'), 'last-bg-color.txt')
+    if (!existsSync(p)) return '#0f0f0f'
+    const raw = readFileSync(p, 'utf8').trim()
+    // Accept any reasonable CSS color literal — the renderer only writes
+    // hex / rgb tokens, never anything sneaky.
+    return /^#[0-9a-fA-F]{3,8}$|^rgb/.test(raw) ? raw : '#0f0f0f'
+  } catch {
+    return '#0f0f0f'
+  }
+}
+ipcMain.on(IPC.SAVE_THEME_BG, (_e, color: string) => {
+  if (typeof color !== 'string' || color.length > 32) return
+  try {
+    writeFileSync(join(app.getPath('userData'), 'last-bg-color.txt'), color, 'utf8')
+  } catch {
+    // best-effort
+  }
+})
+
 function createPopoutWindow(tabId: string): BrowserWindow {
   const existing = popoutWindows.get(tabId)
   if (existing && !existing.isDestroyed()) {
@@ -1026,7 +1052,9 @@ function createPopoutWindow(tabId: string): BrowserWindow {
     hasShadow: true,
     show: false,
     paintWhenInitiallyHidden: false,
-    backgroundColor: '#0f0f0f',
+    // Use the renderer-persisted theme bg so the popout doesn't flash the
+    // default near-black before the React tree paints in light/warm modes.
+    backgroundColor: loadLastBgColor(),
     icon: join(
       __dirname,
       '../../resources',

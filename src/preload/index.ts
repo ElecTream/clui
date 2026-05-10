@@ -111,6 +111,9 @@ export interface CluiAPI {
   // ─── Per-tab pop-out viewports ───
   popoutTab(tabId: string): Promise<void>
   closePopout(tabId?: string): Promise<void>
+  /** Renderers persist their theme bg color so newly-opened host /
+   *  popout windows initialize without flashing the default near-black. */
+  saveThemeBgColor(color: string): void
   /** Pop-out asks for a full state replay of one tab from the pill. */
   requestTabReplay(tabId: string): Promise<unknown | null>
   /** Pill listens for replay requests forwarded from popouts. */
@@ -271,6 +274,7 @@ const api: CluiAPI = {
 
   popoutTab: (tabId: string) => ipcRenderer.invoke(IPC.POPOUT_TAB, tabId),
   closePopout: (tabId?: string) => ipcRenderer.invoke(IPC.CLOSE_POPOUT, tabId),
+  saveThemeBgColor: (color: string) => ipcRenderer.send(IPC.SAVE_THEME_BG, color),
   requestTabReplay: (tabId: string) => ipcRenderer.invoke(IPC.REQUEST_TAB_REPLAY, tabId),
   onReplayTabStateRequest: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, replyId: string, tabId: string) =>

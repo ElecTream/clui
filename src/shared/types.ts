@@ -641,6 +641,10 @@ export const IPC = {
   // a render projection that subscribes to the existing event stream.
   POPOUT_TAB: 'clui:popout-tab',
   CLOSE_POPOUT: 'clui:close-popout',
+  /** renderer → main: persist the current theme bg color so newly-opened
+   *  windows can use it as the initial backgroundColor and avoid a flash
+   *  to default before the React tree paints. */
+  SAVE_THEME_BG: 'clui:save-theme-bg',
   /** popout → main: ask the pill for a full replay of one tab's state. */
   REQUEST_TAB_REPLAY: 'clui:request-tab-replay',
   /** main → pill: forwarded request to send back full tab state. */
