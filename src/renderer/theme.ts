@@ -452,6 +452,13 @@ interface ThemeState {
   updateReady: boolean
   setUpdateAvailable: (version: string) => void
   setUpdateReady: (version: string) => void
+  /** Phase 0.5b — user keybinding overrides keyed by Binding.id. Empty
+   *  string means "use the default for this binding" (so we can persist
+   *  the act of resetting to default without actually deleting). */
+  keybindings: Record<string, string>
+  setKeybinding: (id: string, binding: string) => void
+  resetKeybinding: (id: string) => void
+  resetAllKeybindings: () => void
 }
 
 /** Convert camelCase token name to --clui-kebab-case CSS custom property */
@@ -563,7 +570,35 @@ function saveSettings(s: { themeMode: ThemeMode; soundEnabled: boolean; expanded
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
 }
 
+// ─── Phase 0.5b — keybinding overrides ───
+// Stored separately from SETTINGS_KEY so the existing settings shape stays
+// stable. Map shape: { [bindingId]: bindingString }. Empty string === "use
+// the default", explicit null/undefined === absent.
+
+const KEYBINDINGS_KEY = 'clui-keybindings'
+
+function loadKeybindings(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(KEYBINDINGS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof k === 'string' && typeof v === 'string') out[k] = v
+      }
+      return out
+    }
+  } catch {}
+  return {}
+}
+
+function saveKeybindings(map: Record<string, string>): void {
+  try { localStorage.setItem(KEYBINDINGS_KEY, JSON.stringify(map)) } catch {}
+}
+
 const saved = loadSettings()
+const savedKeybindings = loadKeybindings()
 
 /** Resolve a ThemeMode (which may be 'system') to a concrete variant. */
 function resolveVariant(mode: ThemeMode, systemIsDark: boolean): 'dark' | 'dark-warm' | 'light' {
@@ -616,6 +651,23 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   updateReady: false,
   setUpdateAvailable: (version) => set({ updateVersion: version }),
   setUpdateReady: (version) => set({ updateVersion: version, updateReady: true }),
+
+  keybindings: savedKeybindings,
+  setKeybinding: (id, binding) => {
+    const next = { ...get().keybindings, [id]: binding }
+    set({ keybindings: next })
+    saveKeybindings(next)
+  },
+  resetKeybinding: (id) => {
+    const next = { ...get().keybindings }
+    delete next[id]
+    set({ keybindings: next })
+    saveKeybindings(next)
+  },
+  resetAllKeybindings: () => {
+    set({ keybindings: {} })
+    saveKeybindings({})
+  },
 }))
 
 // Initialize CSS vars with saved theme — resolve 'system' lazily after OS reports.

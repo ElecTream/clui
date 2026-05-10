@@ -4,6 +4,13 @@ import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareO
 import { useColors, useThemeStore, type ThemeMode } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import type { ClaudeVersionInfo } from '../../shared/types'
+import {
+  BINDINGS,
+  type BindingGroup,
+  formatBinding,
+  normalizeBinding,
+  captureBinding,
+} from '../keybindings'
 
 /**
  * SettingsPanel — Phase F.
@@ -409,77 +416,113 @@ function ClaudeConfigSection() {
 // ─── Shortcuts ───
 
 /**
- * Read-only keyboard shortcut viewer (Phase 0.5). Shows the actual
- * bindings hard-coded in useKeyboardShortcuts.ts so the user can
- * discover them without reading source. Rebinding UI is deferred until
- * the keymap is refactored to a data-driven map.
+ * Interactive keybinding viewer + remapper (Phase 0.5b).
  *
- * The shortcuts here MUST match the handler in
- * src/renderer/hooks/useKeyboardShortcuts.ts. If you add a new binding
- * there, mirror it in this list.
+ * Bindings are sourced from the registry in src/renderer/keybindings.ts;
+ * user overrides live in useThemeStore.keybindings (localStorage). The
+ * row's "Edit" button enters capture mode — next non-Esc keypress is
+ * normalized via captureBinding() and saved. Esc cancels capture; Reset
+ * removes the override so the default applies.
+ *
+ * Locked bindings (Esc cascade, Space-to-focus, Ctrl+Tab cycling) live
+ * in useKeyboardShortcuts.ts and are listed at the bottom for discovery
+ * but can't be remapped (their semantics don't fit the generic dispatch).
  */
 function ShortcutsSection() {
   const colors = useColors()
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-  const Mod = isMac ? '⌘' : 'Ctrl'
+  const overrides = useThemeStore((s) => s.keybindings)
+  const setKeybinding = useThemeStore((s) => s.setKeybinding)
+  const resetKeybinding = useThemeStore((s) => s.resetKeybinding)
+  const resetAll = useThemeStore((s) => s.resetAllKeybindings)
+  const [capturingId, setCapturingId] = useState<string | null>(null)
 
-  const groups: Array<{ heading: string; rows: Array<[string, string]> }> = [
-    {
-      heading: 'Tabs',
-      rows: [
-        [`${Mod}+N`, 'New tab (default directory)'],
-        [`${Mod}+T`, 'New tab in same folder'],
-        [`${Mod}+W`, 'Close current tab'],
-        [`${Mod}+Shift+T`, 'Reopen last closed tab'],
-        [`${Mod}+Shift+]`, 'Next tab'],
-        [`${Mod}+Shift+[`, 'Previous tab'],
-        [`${isMac ? '⌃' : 'Ctrl'}+Tab`, 'Cycle permission mode'],
-      ],
-    },
-    {
-      heading: 'Conversation',
-      rows: [
-        [`${Mod}+L`, 'Focus input'],
-        [`Space`, 'Focus input (when nothing else has focus)'],
-        [`${Mod}+K`, 'Clear conversation'],
-        [`${Mod}+.`, 'Stop active run'],
-        [`${Mod}+Shift+C`, 'Copy last response'],
-      ],
-    },
-    {
-      heading: 'Overlay',
-      rows: [
-        [`${Mod}+E`, 'Expand / collapse'],
-        [`${Mod}+M`, 'Minimize (collapse)'],
-        [`${Mod}+Space`, 'Open command palette'],
-        [`Esc`, 'Cascading dismiss (cancel run → close palette → ...)'],
-      ],
-    },
-    {
-      heading: 'Tools & input',
-      rows: [
-        [`${Mod}+Shift+P`, 'Open slash command palette'],
-        [`${Mod}+Shift+M`, 'Toggle skills marketplace'],
-        [`${Mod}+Shift+F`, 'Toggle search panel'],
-        [`${Mod}+Shift+H`, 'Toggle session history'],
-        [`${Mod}+Shift+A`, 'Attach file'],
-        [`${Mod}+Shift+S`, 'Take screenshot'],
-        [`${Mod}+Shift+V`, 'Voice capture'],
-      ],
-    },
+  const groupOrder: Array<{ key: BindingGroup; heading: string }> = [
+    { key: 'tabs', heading: 'Tabs' },
+    { key: 'conversation', heading: 'Conversation' },
+    { key: 'overlay', heading: 'Overlay' },
+    { key: 'tools', heading: 'Tools & input' },
   ]
+  const groups = groupOrder.map((g) => ({
+    ...g,
+    bindings: BINDINGS.filter((b) => b.group === g.key),
+  }))
+
+  // Resolve the active key for a binding (override → default).
+  const activeKey = useCallback(
+    (id: string): string => overrides[id] || BINDINGS.find((b) => b.id === id)?.defaultKey || '',
+    [overrides],
+  )
+
+  // Find the binding (if any) currently using this key — for conflict warnings.
+  const findConflict = (key: string, ignoreId: string): string | null => {
+    if (!key) return null
+    for (const b of BINDINGS) {
+      if (b.id === ignoreId) continue
+      const k = overrides[b.id] || b.defaultKey
+      if (normalizeBinding(k) === normalizeBinding(key)) return b.label
+    }
+    return null
+  }
+
+  // Global capture: while a binding is being edited, the next valid keydown
+  // saves the new combo. Esc cancels.
+  useEffect(() => {
+    if (!capturingId) return
+    const onKey = (e: KeyboardEvent): void => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        setCapturingId(null)
+        return
+      }
+      const captured = captureBinding(e)
+      if (!captured) return
+      // If another binding already uses this combo, clear the conflicting
+      // one so the user always sees one source of truth per key.
+      for (const b of BINDINGS) {
+        if (b.id === capturingId) continue
+        const existing = overrides[b.id] || b.defaultKey
+        if (normalizeBinding(existing) === captured) {
+          // Empty string === "user explicitly cleared this binding".
+          setKeybinding(b.id, '')
+        }
+      }
+      setKeybinding(capturingId, captured)
+      setCapturingId(null)
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [capturingId, overrides, setKeybinding])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div>
-        <div style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 500 }}>Shortcuts</div>
-        <div style={{ color: colors.textTertiary, fontSize: 11, marginTop: 3 }}>
-          Read-only for now — rebinding UI is on the way once the keymap is data-driven.
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 500 }}>Shortcuts</div>
+          <div style={{ color: colors.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 1.5 }}>
+            Click <strong>Edit</strong> next to any row, then press a new combo.
+            Press Esc to cancel. Reset returns a binding to its default.
+          </div>
         </div>
+        <button
+          onClick={resetAll}
+          title="Reset every binding to its default"
+          style={{
+            background: 'transparent',
+            border: `1px solid ${colors.containerBorder}`,
+            color: colors.textSecondary,
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+            padding: '5px 10px',
+            fontSize: 11,
+            cursor: 'pointer',
+          }}
+        >
+          Reset all
+        </button>
       </div>
 
       {groups.map((group) => (
-        <div key={group.heading}>
+        <div key={group.key}>
           <div
             style={{
               color: colors.textTertiary,
@@ -493,37 +536,213 @@ function ShortcutsSection() {
             {group.heading}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {group.rows.map(([keys, label]) => (
-              <div
-                key={keys}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '5px 0',
-                  borderBottom: `1px solid ${colors.containerBorder}`,
-                  fontSize: 12,
-                }}
-              >
-                <span style={{ color: colors.textPrimary }}>{label}</span>
-                <kbd
+            {group.bindings.map((b) => {
+              const current = activeKey(b.id)
+              const isCapturing = capturingId === b.id
+              const isOverridden = !!overrides[b.id] && overrides[b.id] !== b.defaultKey
+              const conflict = isCapturing ? null : findConflict(current, b.id)
+              return (
+                <div
+                  key={b.id}
                   style={{
-                    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                    fontSize: 11,
-                    background: colors.surfaceActive,
-                    color: colors.textSecondary,
-                    border: `1px solid ${colors.containerBorder}`,
-                    borderRadius: 'var(--clui-radius-sm, 6px)',
-                    padding: '2px 7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                    borderBottom: `1px solid ${colors.containerBorder}`,
+                    fontSize: 12,
+                    gap: 8,
                   }}
                 >
-                  {keys}
-                </kbd>
-              </div>
-            ))}
+                  <span style={{ color: colors.textPrimary, flex: 1, minWidth: 0 }}>
+                    {b.label}
+                    {conflict && (
+                      <span style={{ color: colors.statusError, marginLeft: 8, fontSize: 10 }}>
+                        · conflicts with “{conflict}”
+                      </span>
+                    )}
+                  </span>
+                  <KbdCapture
+                    binding={current}
+                    capturing={isCapturing}
+                    overridden={isOverridden}
+                    cleared={overrides[b.id] === ''}
+                    colors={colors}
+                  />
+                  {isCapturing ? (
+                    <button
+                      onClick={() => setCapturingId(null)}
+                      title="Cancel"
+                      style={miniBtn(colors)}
+                    >
+                      Cancel
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setCapturingId(b.id)}
+                        title="Set a new combo"
+                        style={miniBtn(colors)}
+                      >
+                        Edit
+                      </button>
+                      {isOverridden || overrides[b.id] === '' ? (
+                        <button
+                          onClick={() => resetKeybinding(b.id)}
+                          title="Reset to default"
+                          style={miniBtn(colors)}
+                        >
+                          Reset
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}
+
+      <LockedBindingsList colors={colors} />
+    </div>
+  )
+}
+
+function KbdCapture({
+  binding,
+  capturing,
+  overridden,
+  cleared,
+  colors,
+}: {
+  binding: string
+  capturing: boolean
+  overridden: boolean
+  cleared: boolean
+  colors: ReturnType<typeof useColors>
+}) {
+  if (capturing) {
+    return (
+      <kbd
+        style={{
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          fontSize: 11,
+          background: colors.accentLight,
+          color: colors.accent,
+          border: `1px dashed ${colors.accent}`,
+          borderRadius: 'var(--clui-radius-sm, 6px)',
+          padding: '2px 8px',
+          minWidth: 80,
+          textAlign: 'center',
+        }}
+      >
+        Press a combo…
+      </kbd>
+    )
+  }
+  if (cleared) {
+    return (
+      <kbd
+        style={{
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          fontSize: 11,
+          background: 'transparent',
+          color: colors.textTertiary,
+          border: `1px dashed ${colors.containerBorder}`,
+          borderRadius: 'var(--clui-radius-sm, 6px)',
+          padding: '2px 8px',
+        }}
+      >
+        unbound
+      </kbd>
+    )
+  }
+  return (
+    <kbd
+      style={{
+        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+        fontSize: 11,
+        background: colors.surfaceActive,
+        color: overridden ? colors.accent : colors.textSecondary,
+        border: `1px solid ${overridden ? colors.accent : colors.containerBorder}`,
+        borderRadius: 'var(--clui-radius-sm, 6px)',
+        padding: '2px 8px',
+      }}
+    >
+      {formatBinding(binding) || '—'}
+    </kbd>
+  )
+}
+
+function miniBtn(colors: ReturnType<typeof useColors>): React.CSSProperties {
+  return {
+    background: 'transparent',
+    border: `1px solid ${colors.containerBorder}`,
+    color: colors.textSecondary,
+    borderRadius: 'var(--clui-radius-sm, 6px)',
+    padding: '3px 8px',
+    fontSize: 10,
+    cursor: 'pointer',
+  }
+}
+
+function LockedBindingsList({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const ctrlLabel = isMac ? '⌃' : 'Ctrl'
+  const rows: Array<[string, string]> = [
+    ['Esc', 'Cascading dismiss (cancel run → close palette → ...)'],
+    ['Space', 'Focus input (when nothing else has focus)'],
+    [`${ctrlLabel}+Tab`, 'Cycle permission mode forward'],
+    [`${ctrlLabel}+Shift+Tab`, 'Cycle permission mode backward'],
+  ]
+  return (
+    <div>
+      <div
+        style={{
+          color: colors.textTertiary,
+          fontSize: 10,
+          fontWeight: 500,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          marginBottom: 6,
+        }}
+      >
+        Locked
+      </div>
+      <div style={{ color: colors.textTertiary, fontSize: 11, marginBottom: 6, lineHeight: 1.5 }}>
+        These have special semantics (focus-aware, cascading, directional) and aren't user-rebindable.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {rows.map(([keys, label]) => (
+          <div
+            key={keys}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '5px 0',
+              borderBottom: `1px solid ${colors.containerBorder}`,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ color: colors.textPrimary }}>{label}</span>
+            <kbd
+              style={{
+                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                fontSize: 11,
+                background: colors.surfaceActive,
+                color: colors.textTertiary,
+                border: `1px solid ${colors.containerBorder}`,
+                borderRadius: 'var(--clui-radius-sm, 6px)',
+                padding: '2px 7px',
+              }}
+            >
+              {keys}
+            </kbd>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
