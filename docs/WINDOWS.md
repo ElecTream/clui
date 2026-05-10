@@ -60,7 +60,7 @@ npm run dev
 - Claude binary discovery is hardcoded to `%APPDATA%\npm\claude.cmd`. If your install lives elsewhere (Volta, nvm-windows, custom npm prefix), prompts won't reach Claude until Phase 2.
 - `getCliPath()` returns the inherited `process.env.PATH` unchanged. No login-shell PATH enrichment (Windows has no login shell concept).
 - The default global hotkey is `Ctrl+Alt+C` ("C for Clui"). `Alt+Space` is reserved by Windows for the title-bar context menu, and `Ctrl+Alt+Space` is Anthropic's Claude Desktop default — `Ctrl+Alt+C` avoids both. Fallback: `Ctrl+Shift+K`.
-- The "Open in terminal" picker shows a single "Automatic" option (per-app discovery uses macOS-only `/usr/bin/plutil` + `/Applications`). The Automatic launch path works — it opens Windows Terminal (`wt.exe`) at the project path, falling back to `cmd.exe`.
+- The "Open in terminal" launcher honors the Windows default terminal app (Settings → Privacy & Security → For Developers → Terminal). It shells `cmd /c start "" /D <cwd> cmd /k claude` so the user's preferred host (Windows Terminal, Console Host, etc.) takes over.
 - The screenshot button captures the **full screen of the display under your cursor** via `desktopCapturer`. There is no interactive crop selection yet (deferred — would require a renderer-side selection overlay). Crop in your image editor afterward, or paste into Claude as-is.
 - Voice input via `@huggingface/transformers` ONNX is cross-platform and works. The `whisper-cli` shell-out fallback is dead code on Windows.
 - Skill installer shells out `curl | tar` with bash globs. cmd.exe doesn't expand the globs the same way. Will be replaced with Node-native fetch + `tar` package in Phase 2.
@@ -89,3 +89,30 @@ Click **More info** → **Run anyway**. SmartScreen reputation accumulates after
 ## Reporting Windows-specific issues
 
 Open an issue with the `[windows]` tag and include the output of `scripts/doctor.ps1` (once Phase 8 lands).
+
+## Major-upgrade phases (v0.3-win series)
+
+The Windows fork has shifted from "port parity with macOS" to "first-class daily driver." The plan is in [`~/.claude/plans/help-me-create-a-twinkly-lollipop.md`](../../.claude/plans/help-me-create-a-twinkly-lollipop.md). Status:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 0.0 | Design language pass — near-black palette + utility classes | done |
+| 0.1 | Tethered host window — pill + separate solid host with native drag, host-follow, roam across displays | done |
+| 0.5 | Smart Esc cascade + command palette (Ctrl+Space) with fuzzy actions | done |
+| 0.6 | Memoize message components for streaming throughput (react-window virtualization for >50-msg history is deferred) | partial |
+| 0.7 | Pill bar restructure — `[model \| effort \| mode]` + chat-status chip in input bar | done |
+| A | Adaptive model registry — auto-populate from `claude --list-models` with hardcoded fallback | done |
+| B | `~/.claude/settings.json` + `CLAUDE.md` parity bridge with chokidar watch | done |
+| C | Native slash UIs — `/agents`, `/memory`, `/compact`, `/context` as inline cards | done |
+| D | Tabs-snapshot cross-window sync; Chat view in hub. Full CardBoard grid (drag-reorder cards) is deferred. | mvp |
+| E | Goal-driven background agents — budget watchdog (sleep-aware via `powerMonitor`), tray submenu, native completion notifications | done |
+| F | clui-only Settings Panel — Appearance, Claude config bridge, About + version check | done |
+| G | Update banner + one-click `npm i -g @anthropic-ai/claude-code` upgrade | done |
+| H | Tailscale peer session sharing — local HTTP server + shared secret + `tailscale status` autocomplete on the hostname field | done |
+| I | First-launch onboarding modal; docs refresh | done |
+
+Deferred for later:
+
+- **Per-tab BrowserWindow architecture** ("cards-as-windows"). Phase D shipped the tabs-snapshot infrastructure groundwork; the in-hub Chat view is the v1 stopgap. Spinning each conversation into its own BrowserWindow lands as a follow-up.
+- **react-window virtualization** for conversation history past 50 messages. UserMessage + SystemMessage are memoized; throwing a virtual list on top is the remaining win.
+- **Comfortable-density audit (Phase 0.4)** and **28px hit-zone audit (Phase 0.3)**. Touched ad-hoc across the 0.1 stages but not done as a focused pass.

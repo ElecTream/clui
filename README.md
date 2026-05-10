@@ -10,14 +10,21 @@ It's a lightweight, transparent desktop overlay for [Claude Code](https://docs.a
 
 ## Features
 
-- **Floating overlay** - transparent, click-through window that stays on top. Toggle with `⌥ + Space` on macOS / `Ctrl + Alt + C` on Windows (fallback: `Cmd/Ctrl + Shift + K`).
+- **Floating pill + tethered host window** - the always-on-top pill stays slim; conversation/settings/marketplace open in a separate host that follows the pill across displays. Toggle with `⌥ + Space` on macOS / `Ctrl + Alt + C` on Windows (fallback: `Cmd/Ctrl + Shift + K`).
 - **Multi-tab sessions** - each tab spawns its own `claude -p` process with independent session state.
+- **Adaptive model + effort + permission mode** - model picker auto-populates from your installed Claude CLI; per-tab effort (low/medium/high/max) and mode (ask/auto/plan) live on the pill.
+- **Native slash command UIs** - `/agents`, `/memory`, `/compact`, `/context` render as inline cards instead of raw stdout; everything else passes through.
+- **Goal-driven background agents** - hand off a goal with a budget (max turns + wall-clock cap); a watchdog enforces the budget (sleep-aware), the tray shows the active count + per-agent submenu, and a native notification fires on completion.
+- **Cross-machine session resume (Tailscale)** - run a session on one machine, "Bring here" from another over your Tailnet. Hostnames autocomplete from `tailscale status`; auth is a shared secret (Tailscale handles wire crypto).
+- **Settings panels** - upstream Claude config (`~/.claude/settings.json` + `CLAUDE.md`) edits live alongside clui-only config (theme, hotkey, autonomy defaults).
+- **Update parity for the Claude CLI** - clui detects when your installed `claude` is behind and offers a one-click `npm i -g @anthropic-ai/claude-code` upgrade.
 - **Permission approval UI** - intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
+- **Command palette** - `Ctrl+Space` (or `Ctrl+K`) for fuzzy-find actions: switch tab/model/theme, toggle expand, run slash commands, kill the active run.
 - **Conversation history** - browse and resume past Claude Code sessions.
 - **Skills marketplace** - install plugins from Anthropic's GitHub repos without leaving Clui.
-- **Voice input** - local speech-to-text via Whisper (required, installed automatically).
+- **Voice input** - local speech-to-text via Whisper (installed automatically).
 - **File & screenshot attachments** - paste images or attach files directly.
-- **Dual theme** - dark/light mode with system-follow option.
+- **Three themes** - near-black dark, warm paper-dark, warm paper-light; system-follow available.
 
 > [!IMPORTANT]
 > Clui is not yet notarized with Apple. macOS Gatekeeper may block the first launch. See the install sections below for the workaround. Notarization is coming soon.
@@ -126,7 +133,7 @@ npm run doctor
 ## Known Limitations
 
 - **Requires Claude Code CLI** - Clui is a UI layer, not a standalone AI client.
-- **Windows fork is in active development** — see [`docs/WINDOWS.md`](docs/WINDOWS.md) for the parity matrix. As of v0.2.0-win.0, screenshot capture and per-app terminal picker are macOS-only; everything else works on both.
+- **Windows fork is in active development** — see [`docs/WINDOWS.md`](docs/WINDOWS.md) for the parity matrix and the major-upgrade (v0.3-win) phase status (background agents, peer sharing, settings panel, etc.).
 
 ## Q&A
 > Why didn't you just contribute to the original project ?
