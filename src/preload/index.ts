@@ -27,6 +27,8 @@ import type {
   PeerServerState,
   PeerImportRequest,
   DiscoveredPeer,
+  PillAction,
+  PillActionResult,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -109,12 +111,20 @@ export interface CluiAPI {
   /** Pill replies to a replay request with the full tab state. */
   sendTabStateReplay(replyId: string, state: unknown | null): void
 
-  /** Hub asks the pill to create a tab (optionally in a specific directory). */
+  /** Hub asks the pill to create a tab (optionally in a specific directory).
+   *  @deprecated — use requestPillAction({ kind: 'create-tab' }) instead. */
   requestCreateTab(workingDirectory?: string): Promise<{ tabId: string } | null>
-  /** Pill listens for forwarded create-tab requests. */
+  /** @deprecated */
   onCreateTabRequest(callback: (replyId: string, workingDirectory?: string) => void): () => void
-  /** Pill replies to a create-tab request with the new tab's id. */
+  /** @deprecated */
   sendCreateTabResult(replyId: string, result: { tabId: string } | null): void
+
+  /** Generic pill-action broker — see PillAction in shared/types. */
+  requestPillAction(action: PillAction): Promise<PillActionResult>
+  /** Pill side: dispatch incoming pill-action requests. */
+  onPillActionRequest(callback: (replyId: string, action: PillAction) => void): () => void
+  /** Pill side: respond to a pill-action request. */
+  sendPillActionResult(replyId: string, result: PillActionResult): void
   peerImportSession(args: PeerImportRequest): Promise<void>
   onPeerServerState(callback: (state: PeerServerState) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
@@ -272,6 +282,17 @@ const api: CluiAPI = {
   },
   sendCreateTabResult: (replyId: string, result: { tabId: string } | null) => {
     ipcRenderer.send(IPC.CREATE_TAB_RESULT, replyId, result)
+  },
+
+  requestPillAction: (action: PillAction) => ipcRenderer.invoke(IPC.REQUEST_PILL_ACTION, action),
+  onPillActionRequest: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, replyId: string, action: PillAction) =>
+      callback(replyId, action)
+    ipcRenderer.on(IPC.PILL_ACTION_REQUEST, handler)
+    return () => ipcRenderer.removeListener(IPC.PILL_ACTION_REQUEST, handler)
+  },
+  sendPillActionResult: (replyId: string, result: PillActionResult) => {
+    ipcRenderer.send(IPC.PILL_ACTION_RESULT, replyId, result)
   },
   peerImportSession: (args) => ipcRenderer.invoke(IPC.PEER_IMPORT_SESSION, args),
   onPeerServerState: (callback) => {

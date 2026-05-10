@@ -1140,6 +1140,34 @@ ipcMain.on(IPC.CREATE_TAB_RESULT, (_e, replyId: string, result: { tabId: string 
   if (resolver) resolver(result)
 })
 
+/**
+ * Generic any-window → pill action broker. Single round-trip channel for
+ * all tab mutations (create / close / rename / duplicate / reorder).
+ * Replaces the per-action create-tab broker above (which is kept for
+ * IPC stability across builds; new code uses the generic broker).
+ */
+const pendingPillActions = new Map<string, (result: import('../shared/types').PillActionResult) => void>()
+ipcMain.handle(IPC.REQUEST_PILL_ACTION, async (_e, action: import('../shared/types').PillAction) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, error: 'pill window unavailable' }
+  }
+  const replyId = `pa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  return new Promise<import('../shared/types').PillActionResult>((resolve) => {
+    const finish = (result: import('../shared/types').PillActionResult): void => {
+      pendingPillActions.delete(replyId)
+      clearTimeout(timer)
+      resolve(result)
+    }
+    pendingPillActions.set(replyId, finish)
+    const timer = setTimeout(() => finish({ ok: false, error: 'pill action timed out' }), 5000)
+    mainWindow!.webContents.send(IPC.PILL_ACTION_REQUEST, replyId, action)
+  })
+})
+ipcMain.on(IPC.PILL_ACTION_RESULT, (_e, replyId: string, result: import('../shared/types').PillActionResult) => {
+  const resolver = pendingPillActions.get(replyId)
+  if (resolver) resolver(result)
+})
+
 ipcMain.handle(IPC.CLOSE_POPOUT, (_e, tabId?: string) => {
   // tabId omitted → close the popout the call came from. With a tabId,
   // close the matching popout regardless of caller.

@@ -124,6 +124,11 @@ interface State {
   /** Like createTab but pins the working directory + sets hasChosenDirectory.
    *  Used when the hub starts a chat from a folder picker. */
   createTabInDirectory: (workingDirectory: string) => Promise<string>
+  /** Phase D — clone a tab's working dir + title into a new tab. Returns
+   *  the new tab id so the caller can focus it. Messages are NOT copied. */
+  duplicateTab: (tabId: string) => Promise<string | null>
+  /** Phase D — move tab at fromIdx to toIdx (in-place reorder). */
+  reorderTabs: (fromIdx: number, toIdx: number) => void
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   clearTab: () => void
@@ -456,6 +461,40 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title: trimmed } : t)),
     }))
+  },
+
+  duplicateTab: async (tabId: string) => {
+    const src = get().tabs.find((t) => t.id === tabId)
+    if (!src) return null
+    try {
+      const { tabId: newTabId } = await window.clui.createTab()
+      const tab: TabState = {
+        ...makeLocalTab(),
+        id: newTabId,
+        workingDirectory: src.workingDirectory,
+        hasChosenDirectory: src.hasChosenDirectory,
+        title: src.title ? `${src.title} (copy)` : '',
+      }
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+      }))
+      return newTabId
+    } catch {
+      return null
+    }
+  },
+
+  reorderTabs: (fromIdx: number, toIdx: number) => {
+    set((s) => {
+      if (fromIdx < 0 || fromIdx >= s.tabs.length) return s
+      if (toIdx < 0 || toIdx >= s.tabs.length) return s
+      if (fromIdx === toIdx) return s
+      const next = [...s.tabs]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return { tabs: next }
+    })
   },
 
   createTab: async () => {

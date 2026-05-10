@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   House,
   ChatCircleText,
@@ -176,11 +176,9 @@ function NavItem({
  * always lands in both stores.
  */
 function ChatView() {
-  const colors = useColors()
   const tabs = useSessionStore((s) => s.tabs)
   const activeTabId = useSessionStore((s) => s.activeTabId)
   const selectTab = useSessionStore((s) => s.selectTab)
-  const closeTab = useSessionStore((s) => s.closeTab)
   // Local board ↔ focus mode. Independent of the pill's expanded state.
   const [focusedTabId, setFocusedTabId] = useState<string | null>(null)
   const focusedTab = tabs.find((t) => t.id === focusedTabId)
@@ -208,7 +206,6 @@ function ChatView() {
       tabs={tabs}
       activeTabId={activeTabId}
       onOpen={(id) => setFocusedTabId(id)}
-      onClose={(id) => closeTab(id)}
     />
   )
 }
@@ -217,25 +214,33 @@ function TabsBoard({
   tabs,
   activeTabId,
   onOpen,
-  onClose,
 }: {
   tabs: TabState[]
   activeTabId: string | null
   onOpen: (tabId: string) => void
-  onClose: (tabId: string) => void
 }) {
   const colors = useColors()
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | null>(null)
 
   const onNewChatHere = async (): Promise<void> => {
-    const result = await window.clui.requestCreateTab?.()
-    if (result?.tabId) onOpen(result.tabId)
+    const result = await window.clui.requestPillAction({ kind: 'create-tab' })
+    if (result.ok && result.tabId) onOpen(result.tabId)
   }
   const onNewChatInDir = async (): Promise<void> => {
     const dir = await window.clui.selectDirectory()
     if (!dir) return
-    const result = await window.clui.requestCreateTab?.(dir)
-    if (result?.tabId) onOpen(result.tabId)
+    const result = await window.clui.requestPillAction({ kind: 'create-tab', workingDirectory: dir })
+    if (result.ok && result.tabId) onOpen(result.tabId)
   }
+
+  const commitReorder = async (fromIdx: number, toIdx: number): Promise<void> => {
+    if (fromIdx === toIdx) return
+    await window.clui.requestPillAction({ kind: 'reorder-tabs', fromIdx, toIdx })
+  }
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), [])
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -270,19 +275,67 @@ function TabsBoard({
               gap: 'var(--clui-space-3)',
             }}
           >
-            {tabs.map((t) => (
-              <TabCard
+            {tabs.map((t, idx) => (
+              <div
                 key={t.id}
-                tab={t}
-                isActive={t.id === activeTabId}
-                onOpen={() => onOpen(t.id)}
-                onPopOut={() => { void window.clui.popoutTab?.(t.id).catch(() => {}) }}
-                onClose={() => onClose(t.id)}
-              />
+                draggable
+                onDragStart={(e) => {
+                  setDragFrom(idx)
+                  e.dataTransfer.effectAllowed = 'move'
+                  // setData() is required on Firefox for drag to start; the
+                  // value is irrelevant since we read from React state.
+                  e.dataTransfer.setData('text/plain', t.id)
+                }}
+                onDragEnd={() => {
+                  setDragFrom(null)
+                  setDragOver(null)
+                }}
+                onDragOver={(e) => {
+                  if (dragFrom === null || dragFrom === idx) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOver !== idx) setDragOver(idx)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (dragFrom === null || dragFrom === idx) return
+                  void commitReorder(dragFrom, idx)
+                  setDragFrom(null)
+                  setDragOver(null)
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({ tabId: t.id, x: e.clientX, y: e.clientY })
+                }}
+                style={{
+                  position: 'relative',
+                  opacity: dragFrom === idx ? 0.4 : 1,
+                  transform: dragOver === idx && dragFrom !== null && dragFrom !== idx ? 'translateY(-2px)' : 'none',
+                  transition: 'transform 120ms ease-out, opacity 120ms ease-out',
+                }}
+              >
+                <TabCard
+                  tab={t}
+                  isActive={t.id === activeTabId}
+                  onOpen={() => onOpen(t.id)}
+                  onPopOut={() => { void window.clui.popoutTab?.(t.id).catch(() => {}) }}
+                  onClose={() => { void window.clui.requestPillAction({ kind: 'close-tab', tabId: t.id }) }}
+                />
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <TabContextMenu
+          tabId={contextMenu.tabId}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+          onFocus={onOpen}
+        />
+      )}
     </div>
   )
 }
@@ -466,6 +519,219 @@ function ToolbarButton({
       {icon}
       {label}
     </button>
+  )
+}
+
+/**
+ * Card right-click context menu — Rename / Duplicate / Pop out / Close.
+ * Floating panel anchored to click coords; clicks outside or Esc dismiss.
+ * All mutations go through the pill-action broker so the pill (canonical
+ * tab owner) stays the single source of truth.
+ */
+function TabContextMenu({
+  tabId,
+  x,
+  y,
+  onClose,
+  onFocus,
+}: {
+  tabId: string
+  x: number
+  y: number
+  onClose: () => void
+  onFocus: (tabId: string) => void
+}) {
+  const colors = useColors()
+  const ref = useRef<HTMLDivElement>(null)
+  const [renaming, setRenaming] = useState(false)
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === tabId))
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  if (!tab) {
+    onClose()
+    return null
+  }
+
+  if (renaming) {
+    return <RenameTabDialog tab={tab} onClose={onClose} />
+  }
+
+  // Clamp inside viewport so the menu doesn't escape the right or bottom edge.
+  const MENU_W = 180
+  const MENU_H = 160
+  const px = Math.min(x, window.innerWidth - MENU_W - 8)
+  const py = Math.min(y, window.innerHeight - MENU_H - 8)
+
+  const items: Array<{ label: string; onClick: () => void; danger?: boolean }> = [
+    { label: 'Open chat', onClick: () => { onFocus(tabId); onClose() } },
+    { label: 'Pop out', onClick: () => { void window.clui.popoutTab?.(tabId); onClose() } },
+    { label: 'Rename…', onClick: () => setRenaming(true) },
+    {
+      label: 'Duplicate',
+      onClick: async () => {
+        const result = await window.clui.requestPillAction({ kind: 'duplicate-tab', tabId })
+        onClose()
+        if (result.ok && result.tabId) onFocus(result.tabId)
+      },
+    },
+    {
+      label: 'Close',
+      danger: true,
+      onClick: async () => {
+        await window.clui.requestPillAction({ kind: 'close-tab', tabId })
+        onClose()
+      },
+    },
+  ]
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed',
+        top: py,
+        left: px,
+        width: MENU_W,
+        background: colors.surfacePrimary,
+        border: `1px solid ${colors.containerBorder}`,
+        borderRadius: 'var(--clui-radius-md, 10px)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        padding: 4,
+        zIndex: 1000,
+      }}
+    >
+      {items.map((item) => (
+        <button
+          key={item.label}
+          onClick={() => { void item.onClick() }}
+          style={{
+            display: 'block',
+            width: '100%',
+            background: 'transparent',
+            border: 'none',
+            color: item.danger ? colors.statusError : colors.textPrimary,
+            textAlign: 'left',
+            padding: '6px 10px',
+            fontSize: 12,
+            cursor: 'pointer',
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.surfaceActive }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Inline rename modal for the context menu — autofocuses the input. */
+function RenameTabDialog({ tab, onClose }: { tab: TabState; onClose: () => void }) {
+  const colors = useColors()
+  const [value, setValue] = useState(tab.title || '')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
+
+  const submit = async (): Promise<void> => {
+    const next = value.trim()
+    if (!next || next === tab.title) { onClose(); return }
+    await window.clui.requestPillAction({ kind: 'rename-tab', tabId: tab.id, title: next })
+    onClose()
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1100,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: colors.surfacePrimary,
+          border: `1px solid ${colors.containerBorder}`,
+          borderRadius: 'var(--clui-radius-md, 10px)',
+          padding: 16,
+          minWidth: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <span style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 500 }}>Rename chat</span>
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit()
+            if (e.key === 'Escape') onClose()
+          }}
+          style={{
+            background: colors.inputPillBg,
+            color: colors.textPrimary,
+            border: `1px solid ${colors.containerBorder}`,
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+            padding: '6px 10px',
+            fontSize: 12,
+            outline: 'none',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: colors.surfaceActive,
+              color: colors.textPrimary,
+              border: 'none',
+              borderRadius: 'var(--clui-radius-sm, 6px)',
+              fontSize: 11,
+              padding: '5px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => { void submit() }}
+            style={{
+              background: colors.accent,
+              color: colors.textOnAccent,
+              border: 'none',
+              borderRadius: 'var(--clui-radius-sm, 6px)',
+              fontSize: 11,
+              padding: '5px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            Rename
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

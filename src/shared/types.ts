@@ -645,7 +645,17 @@ export const IPC = {
   /** hub → main → pill: ask the pill (canonical tab owner) to create a
    *  new tab. Optional working directory. The pill broadcasts the new
    *  tab back via the existing tabs-snapshot. */
+  /** @deprecated — use REQUEST_PILL_ACTION with kind='create-tab'. Kept for
+   *  IPC stability across builds; delete once nothing references it. */
   REQUEST_CREATE_TAB: 'clui:request-create-tab',
+  /** Any window → main → pill: route a tab-mutation through the canonical
+   *  owner. Single broker for create / close / rename / duplicate / reorder.
+   *  Replaces the per-action channels — see PillAction in this file. */
+  REQUEST_PILL_ACTION: 'clui:request-pill-action',
+  /** main → pill: forwarded pill-action request with replyId. */
+  PILL_ACTION_REQUEST: 'clui:pill-action-request',
+  /** pill → main → caller: result of a pill-action request. */
+  PILL_ACTION_RESULT: 'clui:pill-action-result',
   /** main → pill: forwarded request from hub to create a new tab. */
   CREATE_TAB_REQUEST: 'clui:create-tab-request',
   /** pill → main → caller: result of a create-tab request. */
@@ -704,6 +714,9 @@ export interface TabSnapshot {
   workingDirectory: string
   hasChosenDirectory: boolean
   status: TabStatus
+  /** User-visible title — propagated so /rename + duplicate's "(copy)"
+   *  show up in the hub immediately. Empty string == use default. */
+  title: string
 }
 
 export interface TabsSnapshotPayload {
@@ -742,6 +755,38 @@ export interface DiscoveredPeer {
   dnsName: string
   online: boolean
   os: string
+}
+
+/**
+ * Pill-action broker payload. Any window can ask the pill (the canonical
+ * tabs[] owner) to mutate state via a single IPC. New action kinds add
+ * here; the pill's listener dispatches by kind.
+ */
+export type PillAction =
+  | { kind: 'create-tab'; workingDirectory?: string }
+  | { kind: 'close-tab'; tabId: string }
+  | { kind: 'rename-tab'; tabId: string; title: string }
+  | { kind: 'duplicate-tab'; tabId: string }
+  | { kind: 'reorder-tabs'; fromIdx: number; toIdx: number }
+
+export interface PillActionResult {
+  ok: boolean
+  /** create-tab + duplicate-tab return the new tab id. */
+  tabId?: string
+  /** Optional error string for diagnostics. */
+  error?: string
+}
+
+/** Saved peer entry for Phase H per-peer trust list. */
+export interface SavedPeer {
+  hostname: string
+  /** Optional friendly label; falls back to hostname. */
+  label?: string
+  /** Stored secret; treated as sensitive — never broadcast to renderers
+   *  beyond the PeerBrowser session that asked for it. */
+  secret: string
+  /** Last successful list-sessions timestamp (epoch ms). */
+  lastSeen?: number
 }
 
 /** Phase C — Subagent definition stored in ~/.claude/agents/<name>.md. */

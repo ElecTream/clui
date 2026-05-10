@@ -89,6 +89,59 @@ export default function App() {
     })
   }, [])
 
+  // Generic pill-action broker — handles every tab mutation forwarded from
+  // any window (hub, popout, future cards). Single source of truth so the
+  // tabs[] state never forks. New action kinds add a case here.
+  useEffect(() => {
+    return window.clui.onPillActionRequest?.((replyId, action) => {
+      const reply = (result: { ok: boolean; tabId?: string; error?: string }) =>
+        window.clui.sendPillActionResult?.(replyId, result)
+      const store = useSessionStore.getState()
+      try {
+        switch (action.kind) {
+          case 'create-tab': {
+            const create = action.workingDirectory
+              ? store.createTabInDirectory(action.workingDirectory)
+              : store.createTab()
+            void create
+              .then((tabId) => reply({ ok: true, tabId }))
+              .catch((err) => reply({ ok: false, error: String(err?.message ?? err) }))
+            return
+          }
+          case 'close-tab': {
+            store.closeTab(action.tabId)
+            reply({ ok: true })
+            return
+          }
+          case 'rename-tab': {
+            store.renameTab(action.tabId, action.title)
+            reply({ ok: true })
+            return
+          }
+          case 'duplicate-tab': {
+            void store.duplicateTab(action.tabId)
+              .then((tabId) => reply(tabId ? { ok: true, tabId } : { ok: false, error: 'tab not found' }))
+              .catch((err) => reply({ ok: false, error: String(err?.message ?? err) }))
+            return
+          }
+          case 'reorder-tabs': {
+            store.reorderTabs(action.fromIdx, action.toIdx)
+            reply({ ok: true })
+            return
+          }
+          default: {
+            // Exhaustiveness — TS will flag any unhandled discriminator.
+            const _exhaustive: never = action
+            void _exhaustive
+            reply({ ok: false, error: 'unknown action' })
+          }
+        }
+      } catch (err) {
+        reply({ ok: false, error: String((err as Error)?.message ?? err) })
+      }
+    })
+  }, [])
+
   const activeTabStatus = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.status)
   const addAttachments = useSessionStore((s) => s.addAttachments)
   const colors = useColors()

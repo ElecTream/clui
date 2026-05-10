@@ -28,6 +28,7 @@ export function useBroadcastTabsSnapshot(): void {
           workingDirectory: t.workingDirectory,
           hasChosenDirectory: t.hasChosenDirectory,
           status: t.status,
+          title: t.title,
         })),
         activeTabId: state.activeTabId,
       }
@@ -68,6 +69,11 @@ export function useReceiveTabsSnapshot(opts: ReceiverOptions = {}): void {
               workingDirectory: snap.workingDirectory,
               hasChosenDirectory: snap.hasChosenDirectory,
               status: snap.status,
+              // Prefer the snapshot title when it's non-empty so /rename
+              // + duplicate's "(copy)" propagate. Fall back to the
+              // existing title to avoid clobbering on a fresh snapshot
+              // from a not-yet-renamed tab.
+              title: snap.title || existing.title,
             }
           }
           // Build a stub for tabs we haven't seen before. Messages and
@@ -95,7 +101,7 @@ function makeStubTab(snap: TabSnapshot): TabState {
     permissionDenied: null,
     attachments: [],
     messages: [],
-    title: snap.workingDirectory.split(/[\\/]/).pop() || 'Tab',
+    title: snap.title || snap.workingDirectory.split(/[\\/]/).pop() || 'Tab',
     lastResult: null,
     sessionModel: null,
     sessionTools: [],
