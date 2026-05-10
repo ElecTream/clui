@@ -1217,6 +1217,102 @@ import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
   })
 }).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
 
+// Phase H — Tailscale-peer session sharing. Optional server (off by
+// default) lets other clui peers on the user's Tailnet pull session
+// transcripts via /rpc. Auth is a shared secret in the request body;
+// network-level trust is delegated to the user's Tailscale ACLs.
+import { PeerServer, PEER_DEFAULT_PORT } from './cross-machine/peer-server.js'
+import { listPeerSessions, importPeerSession } from './cross-machine/peer-client.js'
+
+let peerServer: PeerServer | null = null
+let peerSecret: string | null = null
+
+function readPeerSecretFromDisk(): string | null {
+  try {
+    const p = require('path').join(app.getPath('userData'), 'peer-secret.txt')
+    return require('fs').readFileSync(p, 'utf8').trim() || null
+  } catch {
+    return null
+  }
+}
+
+function writePeerSecretToDisk(secret: string): void {
+  try {
+    const p = require('path').join(app.getPath('userData'), 'peer-secret.txt')
+    require('fs').writeFileSync(p, secret, 'utf8')
+  } catch (err) {
+    log(`peer-server: failed to persist secret: ${(err as Error).message}`)
+  }
+}
+
+function generatePeerSecret(): string {
+  return require('crypto').randomBytes(24).toString('base64url')
+}
+
+function getOrInitPeerSecret(): string {
+  if (peerSecret) return peerSecret
+  const stored = readPeerSecretFromDisk()
+  if (stored) {
+    peerSecret = stored
+    return peerSecret
+  }
+  peerSecret = generatePeerSecret()
+  writePeerSecretToDisk(peerSecret)
+  return peerSecret
+}
+
+function peerServerState(): import('../shared/types').PeerServerState {
+  return {
+    running: !!peerServer && peerServer.isRunning(),
+    port: PEER_DEFAULT_PORT,
+    hostname: require('os').hostname(),
+    secretPrefix: peerSecret ? peerSecret.slice(0, 6) + '…' : null,
+  }
+}
+
+ipcMain.handle(IPC.PEER_GET_LOCAL_INFO, () => {
+  // Initialize secret on first read so the user can copy/share it
+  // even before they've started the server.
+  getOrInitPeerSecret()
+  return peerServerState()
+})
+
+ipcMain.handle(IPC.PEER_SERVER_START, async () => {
+  const secret = getOrInitPeerSecret()
+  if (!peerServer) peerServer = new PeerServer(secret, PEER_DEFAULT_PORT)
+  await peerServer.start()
+  const state = peerServerState()
+  broadcast(IPC.PEER_SERVER_STATE, state)
+  return state
+})
+
+ipcMain.handle(IPC.PEER_SERVER_STOP, async () => {
+  if (peerServer) await peerServer.stop()
+  const state = peerServerState()
+  broadcast(IPC.PEER_SERVER_STATE, state)
+  return state
+})
+
+ipcMain.handle(IPC.PEER_GENERATE_SECRET, () => {
+  const next = generatePeerSecret()
+  peerSecret = next
+  writePeerSecretToDisk(next)
+  if (peerServer) peerServer.setSecret(next)
+  return peerServerState()
+})
+
+ipcMain.handle(IPC.PEER_LIST_SESSIONS, async (_e, args: { hostname: string; secret: string; port?: number }) => {
+  return listPeerSessions(args)
+})
+
+ipcMain.handle(IPC.PEER_IMPORT_SESSION, async (_e, args: import('../shared/types').PeerImportRequest) => {
+  await importPeerSession(
+    { hostname: args.hostname, secret: args.secret, port: args.port },
+    args.projectPath,
+    args.sessionId,
+  )
+})
+
 // Phase G — upgrade the user's installed Claude CLI by spawning
 // `npm i -g @anthropic-ai/claude-code` in a fresh terminal window
 // (so the user can see install progress + handle any npm auth

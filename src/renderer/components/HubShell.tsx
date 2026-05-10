@@ -7,16 +7,18 @@ import {
   GearSix,
   Plus,
   FolderOpen,
+  GlobeHemisphereWest,
 } from '@phosphor-icons/react'
 import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import { SettingsPanel } from './SettingsPanel'
 import { MarketplacePanel } from './MarketplacePanel'
 import { ConversationView } from './ConversationView'
+import { PeerBrowser } from './PeerBrowser'
 import type { SessionMeta } from '../../shared/types'
 import { shortPath, timeAgo } from '../utils/format'
 
-type HubView = 'chat' | 'home' | 'history' | 'marketplace' | 'settings'
+type HubView = 'chat' | 'home' | 'history' | 'marketplace' | 'peers' | 'settings'
 
 export default function HubShell() {
   const colors = useColors()
@@ -47,6 +49,7 @@ export default function HubShell() {
         {view === 'home' && <HomeView setView={setView} />}
         {view === 'history' && <HistoryView />}
         {view === 'marketplace' && <MarketplaceView />}
+        {view === 'peers' && <PeerBrowser />}
         {view === 'settings' && <SettingsView />}
       </main>
     </div>
@@ -97,6 +100,12 @@ function Sidebar({
         onClick={() => setView('marketplace')}
         icon={<Storefront size={14} />}
         label="Marketplace"
+      />
+      <NavItem
+        active={view === 'peers'}
+        onClick={() => setView('peers')}
+        icon={<GlobeHemisphereWest size={14} />}
+        label="Peers"
       />
       <NavItem
         active={view === 'settings'}

@@ -594,6 +594,15 @@ export const IPC = {
   LIST_BACKGROUND_AGENTS: 'clui:list-background-agents',
   BACKGROUND_AGENT_UPDATE: 'clui:background-agent-update',
 
+  // Phase H — Tailscale-peer session sharing
+  PEER_SERVER_STATE: 'clui:peer-server-state',
+  PEER_SERVER_START: 'clui:peer-server-start',
+  PEER_SERVER_STOP: 'clui:peer-server-stop',
+  PEER_LIST_SESSIONS: 'clui:peer-list-sessions',
+  PEER_IMPORT_SESSION: 'clui:peer-import-session',
+  PEER_GENERATE_SECRET: 'clui:peer-generate-secret',
+  PEER_GET_LOCAL_INFO: 'clui:peer-get-local-info',
+
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
   // transparent canvas to eliminate shadow-bleed and give the user a real
@@ -652,6 +661,31 @@ export interface TabSnapshot {
 export interface TabsSnapshotPayload {
   tabs: TabSnapshot[]
   activeTabId: string
+}
+
+/** Phase H — peer session metadata fetched from a remote clui. */
+export interface PeerSessionMeta {
+  sessionId: string
+  projectPath: string
+  lastTimestamp: string
+  size: number
+  firstMessage: string | null
+}
+
+export interface PeerServerState {
+  running: boolean
+  port: number
+  hostname: string | null
+  /** First chars of the secret — for display, not for auth. */
+  secretPrefix: string | null
+}
+
+export interface PeerImportRequest {
+  hostname: string
+  secret: string
+  port?: number
+  projectPath: string
+  sessionId: string
 }
 
 /** Phase C — Subagent definition stored in ~/.claude/agents/<name>.md. */

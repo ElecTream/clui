@@ -23,6 +23,9 @@ import type {
   TabsSnapshotPayload,
   BackgroundAgentRecord,
   StartBackgroundAgentInput,
+  PeerSessionMeta,
+  PeerServerState,
+  PeerImportRequest,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -86,6 +89,15 @@ export interface CluiAPI {
   stopBackgroundAgent(tabId: string): Promise<void>
   listBackgroundAgents(): Promise<BackgroundAgentRecord[]>
   onBackgroundAgentUpdate(callback: (record: BackgroundAgentRecord) => void): () => void
+
+  // ─── Phase H: Tailscale-peer session sharing ───
+  peerGetLocalInfo(): Promise<PeerServerState>
+  peerServerStart(): Promise<PeerServerState>
+  peerServerStop(): Promise<PeerServerState>
+  peerGenerateSecret(): Promise<PeerServerState>
+  peerListSessions(args: { hostname: string; secret: string; port?: number }): Promise<PeerSessionMeta[]>
+  peerImportSession(args: PeerImportRequest): Promise<void>
+  onPeerServerState(callback: (state: PeerServerState) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
   checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
   /** Phase G — open a terminal and run the upgrade command. */
@@ -208,6 +220,18 @@ const api: CluiAPI = {
     const handler = (_e: Electron.IpcRendererEvent, record: BackgroundAgentRecord) => callback(record)
     ipcRenderer.on(IPC.BACKGROUND_AGENT_UPDATE, handler)
     return () => ipcRenderer.removeListener(IPC.BACKGROUND_AGENT_UPDATE, handler)
+  },
+  // Phase H — peer session sharing
+  peerGetLocalInfo: () => ipcRenderer.invoke(IPC.PEER_GET_LOCAL_INFO),
+  peerServerStart: () => ipcRenderer.invoke(IPC.PEER_SERVER_START),
+  peerServerStop: () => ipcRenderer.invoke(IPC.PEER_SERVER_STOP),
+  peerGenerateSecret: () => ipcRenderer.invoke(IPC.PEER_GENERATE_SECRET),
+  peerListSessions: (args) => ipcRenderer.invoke(IPC.PEER_LIST_SESSIONS, args),
+  peerImportSession: (args) => ipcRenderer.invoke(IPC.PEER_IMPORT_SESSION, args),
+  onPeerServerState: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, state: PeerServerState) => callback(state)
+    ipcRenderer.on(IPC.PEER_SERVER_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC.PEER_SERVER_STATE, handler)
   },
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
