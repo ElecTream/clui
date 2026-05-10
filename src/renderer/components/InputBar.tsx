@@ -463,6 +463,16 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
         clearTab()
         addSystemMessage('Conversation cleared.')
         break
+      case '/background': {
+        // Phase E — open the background-agent launcher card. The card
+        // collects goal + budget, then calls window.clui.startBackgroundAgent.
+        const data = JSON.stringify({
+          tabId: tab?.id ?? null,
+          projectPath: tab?.workingDirectory ?? '~',
+        })
+        addSystemMessage(`__BACKGROUND_LAUNCHER__${data}`)
+        break
+      }
       case '/agents': {
         // Phase C — native /agents card. Lists subagents from
         // ~/.claude/agents/<name>.md via the Phase C bridge. The card

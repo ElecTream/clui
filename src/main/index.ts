@@ -1217,6 +1217,42 @@ import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
   })
 }).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
 
+// Phase E — background-agent registry. Wraps ControlPlane.submitPrompt
+// with a budget watchdog. Imported at top-level because the registry
+// subscribes to controlPlane events from construction.
+import { BackgroundAgentRegistry } from './claude/background-registry.js'
+const backgroundAgents = new BackgroundAgentRegistry(controlPlane)
+backgroundAgents.on('update', (record: import('../shared/types').BackgroundAgentRecord) => {
+  broadcast(IPC.BACKGROUND_AGENT_UPDATE, record)
+  updateTrayBadge()
+})
+backgroundAgents.on('removed', () => {
+  updateTrayBadge()
+})
+
+function updateTrayBadge(): void {
+  if (!tray) return
+  const n = backgroundAgents.activeCount()
+  const baseTitle = 'clui'
+  if (n > 0) {
+    tray.setToolTip(`${baseTitle} — ${n} background agent${n === 1 ? '' : 's'} running`)
+  } else {
+    tray.setToolTip(baseTitle)
+  }
+}
+
+ipcMain.handle(IPC.START_BACKGROUND_AGENT, async (_e, input: import('../shared/types').StartBackgroundAgentInput) => {
+  return backgroundAgents.start(input)
+})
+
+ipcMain.handle(IPC.STOP_BACKGROUND_AGENT, async (_e, tabId: string) => {
+  await backgroundAgents.stop(tabId)
+})
+
+ipcMain.handle(IPC.LIST_BACKGROUND_AGENTS, async () => {
+  return backgroundAgents.list()
+})
+
 // Phase D — tabs snapshot sync. The pill renderer broadcasts a snapshot
 // whenever its tabs/activeTabId change; main re-fans to every other
 // window so they can mirror state for the conversation view.

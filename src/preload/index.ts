@@ -21,6 +21,8 @@ import type {
   ClaudeVersionInfo,
   AgentMeta,
   TabsSnapshotPayload,
+  BackgroundAgentRecord,
+  StartBackgroundAgentInput,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -78,6 +80,12 @@ export interface CluiAPI {
   // ─── Phase D: cross-window tab state sync ───
   broadcastTabsSnapshot(payload: TabsSnapshotPayload): void
   onTabsSnapshot(callback: (payload: TabsSnapshotPayload) => void): () => void
+
+  // ─── Phase E: background agents ───
+  startBackgroundAgent(input: StartBackgroundAgentInput): Promise<BackgroundAgentRecord>
+  stopBackgroundAgent(tabId: string): Promise<void>
+  listBackgroundAgents(): Promise<BackgroundAgentRecord[]>
+  onBackgroundAgentUpdate(callback: (record: BackgroundAgentRecord) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
   checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
   btwPrompt(opts: BtwOptions): Promise<void>
@@ -188,6 +196,15 @@ const api: CluiAPI = {
     const handler = (_e: Electron.IpcRendererEvent, payload: TabsSnapshotPayload) => callback(payload)
     ipcRenderer.on(IPC.TABS_SNAPSHOT, handler)
     return () => ipcRenderer.removeListener(IPC.TABS_SNAPSHOT, handler)
+  },
+  // Phase E — background agents
+  startBackgroundAgent: (input) => ipcRenderer.invoke(IPC.START_BACKGROUND_AGENT, input),
+  stopBackgroundAgent: (tabId) => ipcRenderer.invoke(IPC.STOP_BACKGROUND_AGENT, tabId),
+  listBackgroundAgents: () => ipcRenderer.invoke(IPC.LIST_BACKGROUND_AGENTS),
+  onBackgroundAgentUpdate: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, record: BackgroundAgentRecord) => callback(record)
+    ipcRenderer.on(IPC.BACKGROUND_AGENT_UPDATE, handler)
+    return () => ipcRenderer.removeListener(IPC.BACKGROUND_AGENT_UPDATE, handler)
   },
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),

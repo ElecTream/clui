@@ -186,7 +186,30 @@ export interface UnknownEvent {
 
 // ─── Tab State Machine (v2 — from execution plan) ───
 
-export type TabStatus = 'connecting' | 'idle' | 'running' | 'completed' | 'failed' | 'dead'
+export type TabStatus = 'connecting' | 'idle' | 'running' | 'completed' | 'failed' | 'dead' | 'background'
+
+/** Phase E — goal-driven background agent record. */
+export interface BackgroundAgentRecord {
+  tabId: string
+  goal: string
+  maxTurns: number
+  maxWallClockMs: number
+  startedAt: number
+  status: 'running' | 'completed' | 'failed' | 'budget_exceeded' | 'cancelled'
+  costUsd: number | null
+  turnsUsed: number | null
+  finishedAt: number | null
+  failureReason: string | null
+}
+
+export interface StartBackgroundAgentInput {
+  tabId: string
+  goal: string
+  maxTurns: number
+  maxWallClockMs: number
+  projectPath: string
+  model?: string
+}
 
 export interface PermissionRequest {
   questionId: string
@@ -563,6 +586,12 @@ export const IPC = {
   // any window.
   BROADCAST_TABS_SNAPSHOT: 'clui:broadcast-tabs-snapshot',
   TABS_SNAPSHOT: 'clui:tabs-snapshot',
+
+  // Phase E — goal-driven background agents
+  START_BACKGROUND_AGENT: 'clui:start-background-agent',
+  STOP_BACKGROUND_AGENT: 'clui:stop-background-agent',
+  LIST_BACKGROUND_AGENTS: 'clui:list-background-agents',
+  BACKGROUND_AGENT_UPDATE: 'clui:background-agent-update',
 
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's

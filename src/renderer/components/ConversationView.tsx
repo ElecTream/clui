@@ -20,6 +20,7 @@ import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { MemoryCard } from './MemoryCard'
 import { CompactConfirmCard } from './CompactConfirmCard'
 import { AgentsCard } from './AgentsCard'
+import { BackgroundAgentLauncher } from './BackgroundAgentLauncher'
 import { getFileIcon } from './FileMentionMenu'
 import { useColors, useThemeStore } from '../theme'
 import { SUMMON_SHORTCUT } from '../utils/shortcuts'
@@ -1261,6 +1262,7 @@ const LOCAL_COMMAND_PREFIX = '__LOCAL_COMMAND_DATA__'
 const MEMORY_PREFIX = '__MEMORY_DATA__'
 const COMPACT_CONFIRM_PREFIX = '__COMPACT_CONFIRM__'
 const AGENTS_PREFIX = '__AGENTS_DATA__'
+const BACKGROUND_LAUNCHER_PREFIX = '__BACKGROUND_LAUNCHER__'
 
 // Phase 0.6 perf — memoized. System messages parse JSON sentinels (context,
 // todo, cost, memory, compact) on every render; without memo this happens
@@ -1335,6 +1337,21 @@ const SystemMessage = React.memo(
     try {
       const parsed = JSON.parse(message.content.slice(AGENTS_PREFIX.length))
       const inner = <AgentsCard data={parsed} colors={colors} />
+      if (skipMotion) return <div className="py-1">{inner}</div>
+      return (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="py-1">
+          {inner}
+        </motion.div>
+      )
+    } catch {}
+  }
+
+  // Phase E — Background-agent launcher (/background)
+  const isBackgroundLauncher = message.content.startsWith(BACKGROUND_LAUNCHER_PREFIX)
+  if (isBackgroundLauncher) {
+    try {
+      const parsed = JSON.parse(message.content.slice(BACKGROUND_LAUNCHER_PREFIX.length))
+      const inner = <BackgroundAgentLauncher data={parsed} colors={colors} />
       if (skipMotion) return <div className="py-1">{inner}</div>
       return (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="py-1">
