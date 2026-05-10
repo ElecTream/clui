@@ -15,7 +15,11 @@ import type { PermissionModeKind } from '../../shared/types'
  * The bindings that stay hard-coded:
  *   - Esc       — cascading-dismiss logic doesn't fit a generic "run X" model
  *   - Space     — must be silenced when an editable element has focus
- *   - Ctrl+Tab  — directional cycling (Tab vs Shift+Tab) needs branching
+ *   - Tab       — DOM focus traversal is disabled in the pill (per user
+ *                 request) so Tab between buttons never produces a focus
+ *                 ring jump. Suppressed except when the user is typing in
+ *                 an editable, where browser default (focus-out) is fine.
+ *   - Shift+Tab — cycles permission mode (ask → auto → plan → ask).
  *
  * IS_MAC normalisation: on macOS, holding Cmd produces lowercase keys even
  * with Shift, so e.key.toLowerCase() is used for the few hard-coded checks.
@@ -120,7 +124,6 @@ export function useKeyboardShortcuts({
 
       const primary = IS_MAC ? e.metaKey : e.ctrlKey
       const ctrlExtra = IS_MAC ? e.ctrlKey : false
-      const tabCycle = e.ctrlKey
       const shift = e.shiftKey
       const key = e.key.toLowerCase()
 
@@ -156,14 +159,24 @@ export function useKeyboardShortcuts({
         return
       }
 
-      // ─── Locked: Ctrl+Tab / Ctrl+Shift+Tab — cycle permission mode ───
-      if (tabCycle && key === 'tab') {
-        e.preventDefault()
-        const current = useSessionStore.getState().permissionMode
-        const next = cyclePermissionMode(current, !shift)
-        useSessionStore.getState().setPermissionMode(next)
-        useSessionStore.getState().addSystemMessage(`Permission mode: ${next}`)
-        return
+      // ─── Locked: Tab / Shift+Tab ───
+      // Pill UI shouldn't show focus ring jumps when the user hits Tab —
+      // suppress focus traversal entirely (except inside an editable, where
+      // the browser default — exit-the-input — is what users expect).
+      // Shift+Tab cycles the permission mode (ask → auto → plan → ask).
+      if (key === 'tab' && !primary && !ctrlExtra && !e.altKey) {
+        if (shift) {
+          e.preventDefault()
+          const current = useSessionStore.getState().permissionMode
+          const next = cyclePermissionMode(current, true)
+          useSessionStore.getState().setPermissionMode(next)
+          useSessionStore.getState().addSystemMessage(`Permission mode: ${next}`)
+          return
+        }
+        if (!isEditable) {
+          e.preventDefault()
+          return
+        }
       }
 
       // ─── Data-driven dispatch via registry ───

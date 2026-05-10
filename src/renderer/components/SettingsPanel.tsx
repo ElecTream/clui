@@ -688,13 +688,11 @@ function miniBtn(colors: ReturnType<typeof useColors>): React.CSSProperties {
 }
 
 function LockedBindingsList({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-  const ctrlLabel = isMac ? '⌃' : 'Ctrl'
   const rows: Array<[string, string]> = [
     ['Esc', 'Cascading dismiss (cancel run → close palette → ...)'],
     ['Space', 'Focus input (when nothing else has focus)'],
-    [`${ctrlLabel}+Tab`, 'Cycle permission mode forward'],
-    [`${ctrlLabel}+Shift+Tab`, 'Cycle permission mode backward'],
+    ['Tab', 'Disabled — no focus ring jumps in the pill'],
+    ['Shift+Tab', 'Cycle permission mode (ask → auto → plan → ask)'],
   ]
   return (
     <div>
