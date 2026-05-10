@@ -61,6 +61,19 @@ export default function App() {
   // windows can mirror state for the conversation view.
   useBroadcastTabsSnapshot()
 
+  // Pop-outs ask the pill for a full state replay (incl. message history)
+  // when they mount. Main forwards the request, we reply with whatever
+  // our local store holds for that tab.
+  useEffect(() => {
+    return window.clui.onReplayTabStateRequest?.((replyId, tabId) => {
+      const state = useSessionStore.getState()
+      const tab = state.tabs.find((t) => t.id === tabId)
+      // Send the whole tab record including messages — IPC structured
+      // clone handles the serialization.
+      window.clui.sendTabStateReplay?.(replyId, tab ?? null)
+    })
+  }, [])
+
   const activeTabStatus = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.status)
   const addAttachments = useSessionStore((s) => s.addAttachments)
   const colors = useColors()

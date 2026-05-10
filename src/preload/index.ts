@@ -98,6 +98,16 @@ export interface CluiAPI {
   peerGenerateSecret(): Promise<PeerServerState>
   peerListSessions(args: { hostname: string; secret: string; port?: number }): Promise<PeerSessionMeta[]>
   peerListTailscalePeers(): Promise<DiscoveredPeer[]>
+
+  // ─── Per-tab pop-out viewports ───
+  popoutTab(tabId: string): Promise<void>
+  closePopout(tabId?: string): Promise<void>
+  /** Pop-out asks for a full state replay of one tab from the pill. */
+  requestTabReplay(tabId: string): Promise<unknown | null>
+  /** Pill listens for replay requests forwarded from popouts. */
+  onReplayTabStateRequest(callback: (replyId: string, tabId: string) => void): () => void
+  /** Pill replies to a replay request with the full tab state. */
+  sendTabStateReplay(replyId: string, state: unknown | null): void
   peerImportSession(args: PeerImportRequest): Promise<void>
   onPeerServerState(callback: (state: PeerServerState) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
@@ -231,6 +241,19 @@ const api: CluiAPI = {
   peerGenerateSecret: () => ipcRenderer.invoke(IPC.PEER_GENERATE_SECRET),
   peerListSessions: (args) => ipcRenderer.invoke(IPC.PEER_LIST_SESSIONS, args),
   peerListTailscalePeers: () => ipcRenderer.invoke(IPC.PEER_LIST_TAILSCALE_PEERS),
+
+  popoutTab: (tabId: string) => ipcRenderer.invoke(IPC.POPOUT_TAB, tabId),
+  closePopout: (tabId?: string) => ipcRenderer.invoke(IPC.CLOSE_POPOUT, tabId),
+  requestTabReplay: (tabId: string) => ipcRenderer.invoke(IPC.REQUEST_TAB_REPLAY, tabId),
+  onReplayTabStateRequest: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, replyId: string, tabId: string) =>
+      callback(replyId, tabId)
+    ipcRenderer.on(IPC.REPLAY_TAB_STATE_REQUEST, handler)
+    return () => ipcRenderer.removeListener(IPC.REPLAY_TAB_STATE_REQUEST, handler)
+  },
+  sendTabStateReplay: (replyId: string, state: unknown | null) => {
+    ipcRenderer.send(IPC.TAB_STATE_REPLAY, replyId, state)
+  },
   peerImportSession: (args) => ipcRenderer.invoke(IPC.PEER_IMPORT_SESSION, args),
   onPeerServerState: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, state: PeerServerState) => callback(state)

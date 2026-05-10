@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, protocol, net, desktopCapturer, clipboard, Notification } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { basename, join, resolve, normalize } from 'path'
-import { existsSync, readdirSync, statSync, createReadStream, mkdirSync, writeFileSync, chmodSync } from 'fs'
+import { existsSync, readdirSync, statSync, createReadStream, mkdirSync, writeFileSync, chmodSync, readFileSync } from 'fs'
 import { readdir } from 'fs/promises'
 import { createInterface } from 'readline'
 import { homedir, tmpdir } from 'os'
@@ -939,6 +939,195 @@ function createHostWindow(): BrowserWindow {
 
   return hostWindow
 }
+
+/**
+ * Per-tab pop-out windows. The "viewport" architecture: each pop-out is a
+ * fresh BrowserWindow loading the same renderer bundle with
+ * `?window=popout&tabId=<id>`. State (messages, status, permissions)
+ * lives in main and streams into the pop-out the same way it streams into
+ * the pill / host. Multiple pop-outs of the same tab are allowed.
+ *
+ * Position is sticky per-tabId across launches; the pop-out does NOT
+ * follow the pill on drag (otherwise dragging the pill across the screen
+ * flings every popped-out window around — the user picked that position
+ * deliberately). Closing a pop-out is destructive (no hide-and-restore
+ * like the host) — it just goes away; the tab keeps running in main.
+ */
+const popoutWindows = new Map<string, BrowserWindow>()
+const POPOUT_DEFAULT_WIDTH = 480
+const POPOUT_DEFAULT_HEIGHT = 720
+
+function computeDefaultPopoutBounds(): HostBounds {
+  // Default placement: centered on the pill's display but offset right of
+  // the host so they don't stack on first open.
+  const display = getOverlayDisplay()
+  const wa = display.workArea
+  const width = POPOUT_DEFAULT_WIDTH
+  const height = POPOUT_DEFAULT_HEIGHT
+  const x = wa.x + Math.min(wa.width - width - 20, Math.round((wa.width - width) / 2 + 240))
+  const y = wa.y + Math.max(20, Math.round((wa.height - height) / 2))
+  return { x, y, width, height }
+}
+
+function loadPopoutBoundsKey(tabId: string): string {
+  return `clui:popout-bounds:${tabId}`
+}
+
+function loadPopoutBounds(tabId: string): HostBounds | null {
+  try {
+    const settingsPath = join(app.getPath('userData'), 'window-bounds.json')
+    if (!existsSync(settingsPath)) return null
+    const raw = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, HostBounds>
+    return raw[loadPopoutBoundsKey(tabId)] ?? null
+  } catch {
+    return null
+  }
+}
+
+function savePopoutBounds(tabId: string, b: HostBounds): void {
+  try {
+    const settingsPath = join(app.getPath('userData'), 'window-bounds.json')
+    const raw = (existsSync(settingsPath)
+      ? JSON.parse(readFileSync(settingsPath, 'utf8'))
+      : {}) as Record<string, HostBounds>
+    raw[loadPopoutBoundsKey(tabId)] = b
+    writeFileSync(settingsPath, JSON.stringify(raw, null, 2))
+  } catch {
+    // Best effort — pop-out bounds are nice-to-have, not load-bearing.
+  }
+}
+
+function createPopoutWindow(tabId: string): BrowserWindow {
+  const existing = popoutWindows.get(tabId)
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore()
+    existing.focus()
+    return existing
+  }
+
+  const initial = clampHostBoundsToDisplay(loadPopoutBounds(tabId) || computeDefaultPopoutBounds())
+
+  const win = new BrowserWindow({
+    x: initial.x,
+    y: initial.y,
+    width: initial.width,
+    height: initial.height,
+    minWidth: 360,
+    minHeight: 480,
+    transparent: false,
+    frame: false,
+    resizable: true,
+    movable: true,
+    // Same overlay membership as host — ride along virtual desktops, no
+    // taskbar pollution. alwaysOnTop is intentional: the user popped this
+    // out *because* they want to keep it visible.
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: true,
+    show: false,
+    paintWhenInitiallyHidden: false,
+    backgroundColor: '#0f0f0f',
+    icon: join(
+      __dirname,
+      '../../resources',
+      process.platform === 'darwin' ? 'icon.icns' : process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+    ),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.setAlwaysOnTop(true, 'screen-saver')
+
+  let saveTimer: NodeJS.Timeout | null = null
+  const persistBounds = (): void => {
+    if (win.isDestroyed()) return
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (win.isDestroyed()) return
+      const b = win.getBounds()
+      savePopoutBounds(tabId, { x: b.x, y: b.y, width: b.width, height: b.height })
+    }, 200)
+  }
+  win.on('moved', persistBounds)
+  win.on('resized', persistBounds)
+
+  win.on('closed', () => {
+    popoutWindows.delete(tabId)
+  })
+
+  win.once('ready-to-show', () => {
+    win.show()
+    if (process.env.ELECTRON_RENDERER_URL && process.env.CLUI_DEVTOOLS === '1') {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  const popoutQuery = `?window=popout&tabId=${encodeURIComponent(tabId)}`
+  if (process.env.ELECTRON_RENDERER_URL) {
+    win.loadURL(process.env.ELECTRON_RENDERER_URL + popoutQuery)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), { search: popoutQuery.slice(1) })
+  }
+
+  popoutWindows.set(tabId, win)
+  return win
+}
+
+ipcMain.handle(IPC.POPOUT_TAB, (_e, tabId: string) => {
+  if (typeof tabId !== 'string' || tabId.length === 0) return
+  createPopoutWindow(tabId)
+})
+
+/**
+ * Tab-state replay broker — when a pop-out mounts it asks the pill for a
+ * full snapshot of the tab including message history. We forward to the
+ * pill window, await its reply, resolve the popout's promise.
+ *
+ * Promises are correlated by a unique replyId; if the pill never answers
+ * (e.g. it's hidden mid-launch and missed the message) we time out at
+ * 2s and resolve null — the popout falls back to live-tail.
+ */
+const pendingReplays = new Map<string, (state: unknown | null) => void>()
+ipcMain.handle(IPC.REQUEST_TAB_REPLAY, async (_e, tabId: string) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null
+  const replyId = `replay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  return new Promise<unknown | null>((resolve) => {
+    const finish = (state: unknown | null): void => {
+      pendingReplays.delete(replyId)
+      clearTimeout(timer)
+      resolve(state)
+    }
+    pendingReplays.set(replyId, finish)
+    const timer = setTimeout(() => finish(null), 2000)
+    mainWindow!.webContents.send(IPC.REPLAY_TAB_STATE_REQUEST, replyId, tabId)
+  })
+})
+ipcMain.on(IPC.TAB_STATE_REPLAY, (_e, replyId: string, state: unknown | null) => {
+  const resolver = pendingReplays.get(replyId)
+  if (resolver) resolver(state)
+})
+
+ipcMain.handle(IPC.CLOSE_POPOUT, (_e, tabId?: string) => {
+  // tabId omitted → close the popout the call came from. With a tabId,
+  // close the matching popout regardless of caller.
+  if (tabId && popoutWindows.has(tabId)) {
+    popoutWindows.get(tabId)?.close()
+    return
+  }
+  const sender = BrowserWindow.fromWebContents(_e.sender)
+  if (!sender) return
+  for (const [id, win] of popoutWindows) {
+    if (win === sender) {
+      win.close()
+      popoutWindows.delete(id)
+      return
+    }
+  }
+})
 
 // Relative offset from pill top-left → host top-left. Captured the first
 // time the host opens (default placement is "above and centered on the

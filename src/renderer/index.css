@@ -27,7 +27,10 @@ html[data-clui-window='pill'] #root {
 }
 html[data-clui-window='host'],
 html[data-clui-window='host'] body,
-html[data-clui-window='host'] #root {
+html[data-clui-window='host'] #root,
+html[data-clui-window='popout'],
+html[data-clui-window='popout'] body,
+html[data-clui-window='popout'] #root {
   background: var(--clui-container-bg, #0f0f0f);
 }
 

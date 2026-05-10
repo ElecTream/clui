@@ -630,6 +630,19 @@ export const IPC = {
   PEER_GET_LOCAL_INFO: 'clui:peer-get-local-info',
   PEER_LIST_TAILSCALE_PEERS: 'clui:peer-list-tailscale-peers',
 
+  // Phase D follow-up — per-tab pop-out viewport. Each pop-out is a
+  // BrowserWindow loading the same renderer with `?window=popout&tabId=X`,
+  // viewing one conversation. State lives in main; the pop-out is purely
+  // a render projection that subscribes to the existing event stream.
+  POPOUT_TAB: 'clui:popout-tab',
+  CLOSE_POPOUT: 'clui:close-popout',
+  /** popout → main: ask the pill for a full replay of one tab's state. */
+  REQUEST_TAB_REPLAY: 'clui:request-tab-replay',
+  /** main → pill: forwarded request to send back full tab state. */
+  REPLAY_TAB_STATE_REQUEST: 'clui:replay-tab-state-request',
+  /** pill → main → caller: full tab state including messages. */
+  TAB_STATE_REPLAY: 'clui:tab-state-replay',
+
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
   // transparent canvas to eliminate shadow-bleed and give the user a real

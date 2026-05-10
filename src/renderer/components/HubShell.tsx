@@ -8,6 +8,7 @@ import {
   Plus,
   FolderOpen,
   GlobeHemisphereWest,
+  ArrowsOutCardinal,
 } from '@phosphor-icons/react'
 import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
@@ -179,6 +180,10 @@ function ChatView() {
     )
   }
 
+  const onPopOut = (): void => {
+    void window.clui.popoutTab?.(tab.id).catch(() => {})
+  }
+
   return (
     <div
       style={{
@@ -190,6 +195,39 @@ function ChatView() {
         background: colors.containerBg,
       }}
     >
+      <div
+        style={{
+          flexShrink: 0,
+          height: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          padding: '0 var(--clui-space-3)',
+          borderBottom: `1px solid ${colors.containerBorder}`,
+        }}
+      >
+        <button
+          onClick={onPopOut}
+          title="Pop this chat into its own window"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: colors.textTertiary,
+            cursor: 'pointer',
+            padding: '4px 6px',
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+            fontSize: 11,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textTertiary }}
+        >
+          <ArrowsOutCardinal size={11} />
+          Pop out
+        </button>
+      </div>
       <ConversationView />
     </div>
   )
