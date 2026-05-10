@@ -6,7 +6,7 @@ import { useColors, useThemeStore } from '../theme'
 /**
  * Pill toolbar — the always-visible row above the input pill.
  *
- * The active chat name now lives inside the input bar ("working on
+ * The active chat name now lives inside the input bar ("working in
  * <name>"), so the toolbar is purely the three knobs the user flips
  * mid-conversation: model, effort, permission mode. Drag handle on
  * the right; UpdateButton tucks in next to it when an upgrade is

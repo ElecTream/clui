@@ -1278,7 +1278,7 @@ function ChatStatusChip() {
             maxWidth: 180,
           }}
         >
-          <span style={{ color: colors.textMuted }}>working on </span>
+          <span style={{ color: colors.textMuted }}>working in </span>
           <span style={{ color: colors.textSecondary }}>{tab.title}</span>
         </span>
       )}
