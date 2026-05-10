@@ -15,6 +15,12 @@
  * submit a prompt under a fresh requestId, then watches the same event
  * stream every other tab uses. That keeps the runtime path identical
  * to a foreground run.
+ *
+ * Sleep handling: a naive setTimeout would count machine-sleep against
+ * the wall-clock budget — leave the laptop closed for an hour, come
+ * back, every 30-min agent has 'budget_exceeded'. We pause every
+ * watchdog on powerMonitor's 'suspend' and re-arm with the remaining
+ * budget on 'resume', preserving fairness across sleep cycles.
  */
 import type {
   BackgroundAgentRecord,
@@ -24,16 +30,23 @@ import type {
 import type { ControlPlane } from './control-plane'
 import * as crypto from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { powerMonitor } from 'electron'
 
 interface ActiveAgent {
   record: BackgroundAgentRecord
   requestId: string
-  watchdog: NodeJS.Timeout
+  /** Active timer; null while the system is suspended. */
+  watchdog: NodeJS.Timeout | null
+  /** Wall-time accumulated across all run-segments before the current one. */
+  msElapsedBeforeSegment: number
+  /** Date.now() when the current run-segment started; 0 while paused. */
+  segmentStartedAt: number
 }
 
 export class BackgroundAgentRegistry extends EventEmitter {
   private agents = new Map<string, ActiveAgent>()
   private controlPlane: ControlPlane
+  private suspendListenersBound = false
 
   constructor(controlPlane: ControlPlane) {
     super()
@@ -60,6 +73,48 @@ export class BackgroundAgentRegistry extends EventEmitter {
         }
       }
     })
+
+    this.bindSuspendListeners()
+  }
+
+  private bindSuspendListeners(): void {
+    if (this.suspendListenersBound) return
+    // powerMonitor is only available after the app is ready; in main this
+    // class is constructed after app-ready so subscribing here is safe.
+    powerMonitor.on('suspend', () => this.pauseAllWatchdogs())
+    powerMonitor.on('resume', () => this.resumeAllWatchdogs())
+    // 'lock-screen' / 'unlock-screen' are NOT pause signals — the user is
+    // gone but the machine is awake and runs continue.
+    this.suspendListenersBound = true
+  }
+
+  private pauseAllWatchdogs(): void {
+    const now = Date.now()
+    for (const active of this.agents.values()) {
+      if (active.record.status !== 'running') continue
+      if (!active.watchdog) continue
+      clearTimeout(active.watchdog)
+      active.watchdog = null
+      active.msElapsedBeforeSegment += now - active.segmentStartedAt
+      active.segmentStartedAt = 0
+    }
+  }
+
+  private resumeAllWatchdogs(): void {
+    const now = Date.now()
+    for (const [tabId, active] of this.agents) {
+      if (active.record.status !== 'running') continue
+      if (active.watchdog) continue
+      const remaining = active.record.maxWallClockMs - active.msElapsedBeforeSegment
+      if (remaining <= 0) {
+        // Budget already gone (e.g. suspend lasted longer than buffer); fire
+        // immediately so the user sees the same outcome as a never-slept run.
+        this.onWallClockExpired(tabId)
+        continue
+      }
+      active.segmentStartedAt = now
+      active.watchdog = setTimeout(() => this.onWallClockExpired(tabId), remaining)
+    }
   }
 
   list(): BackgroundAgentRecord[] {
@@ -100,7 +155,13 @@ export class BackgroundAgentRegistry extends EventEmitter {
       this.onWallClockExpired(tabId)
     }, maxWallClockMs)
 
-    this.agents.set(tabId, { record, requestId, watchdog })
+    this.agents.set(tabId, {
+      record,
+      requestId,
+      watchdog,
+      msElapsedBeforeSegment: 0,
+      segmentStartedAt: Date.now(),
+    })
     this.emit('update', record)
 
     try {
@@ -123,7 +184,7 @@ export class BackgroundAgentRegistry extends EventEmitter {
     const active = this.agents.get(tabId)
     if (!active) return
     if (active.record.status !== 'running') return
-    clearTimeout(active.watchdog)
+    if (active.watchdog) clearTimeout(active.watchdog)
     this.controlPlane.cancel(active.requestId)
     this.markFinished(tabId, 'cancelled', null)
   }
@@ -156,7 +217,8 @@ export class BackgroundAgentRegistry extends EventEmitter {
   ): void {
     const active = this.agents.get(tabId)
     if (!active) return
-    clearTimeout(active.watchdog)
+    if (active.watchdog) clearTimeout(active.watchdog)
+    active.watchdog = null
     active.record.status = status
     active.record.finishedAt = Date.now()
     active.record.failureReason = failureReason
