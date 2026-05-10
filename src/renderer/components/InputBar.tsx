@@ -463,6 +463,21 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
         clearTab()
         addSystemMessage('Conversation cleared.')
         break
+      case '/agents': {
+        // Phase C — native /agents card. Lists subagents from
+        // ~/.claude/agents/<name>.md via the Phase C bridge. The card
+        // (rendered from the __AGENTS_DATA__ sentinel) lets the user
+        // edit / create / delete agents.
+        window.clui.listAgents?.()
+          .then((agents) => {
+            const data = JSON.stringify({ agents: agents ?? [] })
+            addSystemMessage(`__AGENTS_DATA__${data}`)
+          })
+          .catch(() => {
+            addSystemMessage('Agents bridge not available — Phase C requires the agents.ts module.')
+          })
+        break
+      }
       case '/memory': {
         // Phase C — native /memory card. Loads ~/.claude/CLAUDE.md (global)
         // + <cwd>/CLAUDE.md (project) via the Phase B bridge. The card

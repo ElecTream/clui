@@ -1217,6 +1217,27 @@ import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
   })
 }).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
 
+// Phase C — agents IPC. Reads/writes ~/.claude/agents/<name>.md.
+ipcMain.handle(IPC.LIST_AGENTS, async () => {
+  const { listAgents } = await import('./claude/agents.js')
+  return listAgents()
+})
+
+ipcMain.handle(IPC.WRITE_AGENT, async (_e, agent: import('../shared/types').AgentMeta) => {
+  const { writeAgent } = await import('./claude/agents.js')
+  return writeAgent(agent)
+})
+
+ipcMain.handle(IPC.DELETE_AGENT, async (_e, filePath: string) => {
+  const { deleteAgent } = await import('./claude/agents.js')
+  return deleteAgent(filePath)
+})
+
+ipcMain.handle(IPC.PATH_FOR_NEW_AGENT, async (_e, name: string) => {
+  const { pathForNewAgent } = await import('./claude/agents.js')
+  return pathForNewAgent(name)
+})
+
 ipcMain.handle(IPC.RESPOND_PERMISSION, (_event, { tabId, questionId, optionId }: { tabId: string; questionId: string; optionId: string }) => {
   log(`IPC RESPOND_PERMISSION: tab=${tabId} question=${questionId} option=${optionId}`)
   return controlPlane.respondToPermission(tabId, questionId, optionId)

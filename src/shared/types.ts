@@ -551,6 +551,12 @@ export const IPC = {
   WRITE_PROJECT_CLAUDEMD: 'clui:write-project-claudemd',
   CLAUDE_SETTINGS_CHANGED: 'clui:claude-settings-changed',
 
+  // Agents bridge (Phase C — native /agents UI)
+  LIST_AGENTS: 'clui:list-agents',
+  WRITE_AGENT: 'clui:write-agent',
+  DELETE_AGENT: 'clui:delete-agent',
+  PATH_FOR_NEW_AGENT: 'clui:path-for-new-agent',
+
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
   // transparent canvas to eliminate shadow-bleed and give the user a real
@@ -594,6 +600,15 @@ export const IPC = {
  */
 export type ClaudeSettings = Record<string, unknown>
 export type ClaudeSettingsChangeKind = 'settings' | 'claudemd'
+
+/** Phase C — Subagent definition stored in ~/.claude/agents/<name>.md. */
+export interface AgentMeta {
+  name: string
+  description: string
+  tools: string | null
+  body: string
+  filePath: string
+}
 
 /** Phase G — Claude CLI version check result. */
 export interface ClaudeVersionInfo {

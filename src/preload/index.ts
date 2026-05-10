@@ -19,6 +19,7 @@ import type {
   ClaudeSettings,
   ClaudeSettingsChangeKind,
   ClaudeVersionInfo,
+  AgentMeta,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -67,6 +68,11 @@ export interface CluiAPI {
   writeProjectCLAUDEMd(projectPath: string, content: string): Promise<void>
   /** Subscribe to ~/.claude file changes from external editors / Claude CLI. */
   onClaudeSettingsChanged(callback: (kind: ClaudeSettingsChangeKind) => void): () => void
+  // ─── Phase C: agents bridge ───
+  listAgents(): Promise<AgentMeta[]>
+  writeAgent(agent: AgentMeta): Promise<AgentMeta>
+  deleteAgent(filePath: string): Promise<void>
+  pathForNewAgent(name: string): Promise<string>
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
   checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
   btwPrompt(opts: BtwOptions): Promise<void>
@@ -166,6 +172,11 @@ const api: CluiAPI = {
     return () => ipcRenderer.removeListener(IPC.CLAUDE_SETTINGS_CHANGED, handler)
   },
   checkClaudeVersion: (force) => ipcRenderer.invoke(IPC.CHECK_CLAUDE_VERSION, force),
+  // Phase C — agents bridge
+  listAgents: () => ipcRenderer.invoke(IPC.LIST_AGENTS),
+  writeAgent: (agent) => ipcRenderer.invoke(IPC.WRITE_AGENT, agent),
+  deleteAgent: (filePath) => ipcRenderer.invoke(IPC.DELETE_AGENT, filePath),
+  pathForNewAgent: (name) => ipcRenderer.invoke(IPC.PATH_FOR_NEW_AGENT, name),
   // Search
   searchSessions: (query: string) => ipcRenderer.invoke(IPC.SEARCH_SESSIONS, query),
   triggerSearchIndex: () => ipcRenderer.send(IPC.SEARCH_BUILD_INDEX),

@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
-  Trash, Cpu, CurrencyDollar, Question, HardDrives, Sparkle, Info, ChatDots, Archive, BookOpen,
+  Trash, Cpu, CurrencyDollar, Question, HardDrives, Sparkle, Info, ChatDots, Archive, BookOpen, UsersThree,
 } from '@phosphor-icons/react'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors } from '../theme'
@@ -14,6 +14,7 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  { command: '/agents', description: 'View and edit subagents (~/.claude/agents)', icon: <UsersThree size={13} /> },
   { command: '/clear', description: 'Clear conversation history', icon: <Trash size={13} /> },
   { command: '/compact', description: 'Compact the current conversation', icon: <Archive size={13} /> },
   { command: '/cost', description: 'Show token usage and cost', icon: <CurrencyDollar size={13} /> },
