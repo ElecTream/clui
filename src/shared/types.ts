@@ -562,8 +562,9 @@ export const IPC = {
   // Model registry (Phase A — adaptive model detection)
   LIST_MODELS: 'clui:list-models',
 
-  // Phase G — Claude CLI version check
+  // Phase G — Claude CLI version check + install
   CHECK_CLAUDE_VERSION: 'clui:check-claude-version',
+  UPGRADE_CLAUDE_CLI: 'clui:upgrade-claude-cli',
 
   // Settings + CLAUDE.md bridge (Phase B — parity with Claude CLI config)
   READ_CLAUDE_SETTINGS: 'clui:read-claude-settings',

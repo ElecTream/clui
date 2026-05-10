@@ -1217,6 +1217,34 @@ import('./claude/settings-bridge.js').then(({ getSettingsWatcher }) => {
   })
 }).catch((err) => log(`settings-bridge load failed: ${err?.message ?? err}`))
 
+// Phase G — upgrade the user's installed Claude CLI by spawning
+// `npm i -g @anthropic-ai/claude-code` in a fresh terminal window
+// (so the user can see install progress + handle any npm auth
+// prompts). Uses the same Windows-default-terminal path the
+// "Open in CLI" launcher uses, so whatever the user has set in
+// Settings → Privacy & Security → For Developers → Terminal hosts
+// the install.
+ipcMain.handle(IPC.UPGRADE_CLAUDE_CLI, async (_e, command?: string) => {
+  const cmd = command || 'npm install -g @anthropic-ai/claude-code'
+  if (process.platform === 'win32') {
+    spawn(
+      'cmd.exe',
+      ['/c', 'start', '', 'cmd.exe', '/k', cmd],
+      { detached: true, stdio: 'ignore', windowsHide: false },
+    ).unref()
+    return true
+  }
+  // macOS / Linux: hand to the existing default-terminal launcher
+  // by writing a tiny launch script.
+  const tmpDir = require('os').tmpdir() as string
+  const path = require('path') as typeof import('path')
+  const fs = require('fs') as typeof import('fs')
+  const scriptPath = path.join(tmpDir, `clui-upgrade-${Date.now()}.sh`)
+  fs.writeFileSync(scriptPath, `#!/bin/sh\n${cmd}\n`, { mode: 0o755 })
+  spawn('open', ['-a', 'Terminal', scriptPath], { detached: true, stdio: 'ignore' }).unref()
+  return true
+})
+
 // Phase E — background-agent registry. Wraps ControlPlane.submitPrompt
 // with a budget watchdog. Imported at top-level because the registry
 // subscribes to controlPlane events from construction.

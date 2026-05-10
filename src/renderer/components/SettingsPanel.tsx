@@ -410,6 +410,8 @@ function AboutSection() {
   const [versionInfo, setVersionInfo] = useState<ClaudeVersionInfo | null>(null)
   const [versionLoading, setVersionLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   const refreshVersion = useCallback(async (force = false) => {
     setVersionLoading(true)
@@ -422,6 +424,24 @@ function AboutSection() {
       setVersionLoading(false)
     }
   }, [])
+
+  const onRunUpgrade = useCallback(async () => {
+    if (!versionInfo) return
+    setUpgradeError(null)
+    setUpgrading(true)
+    try {
+      await window.clui.upgradeClaudeCLI?.(versionInfo.upgradeCommand)
+      // Re-check after a short delay so the banner reflects the new
+      // version once the install completes. The terminal window
+      // continues to run independently — we just refresh our cached
+      // value.
+      setTimeout(() => refreshVersion(true), 12_000)
+    } catch (err: unknown) {
+      setUpgradeError(err instanceof Error ? err.message : 'Failed to launch upgrade')
+    } finally {
+      setUpgrading(false)
+    }
+  }, [versionInfo, refreshVersion])
 
   useEffect(() => {
     refreshVersion()
@@ -470,7 +490,7 @@ function AboutSection() {
               Claude CLI update available
             </div>
             <div style={{ color: colors.textSecondary, fontSize: 10, marginTop: 2 }}>
-              {versionInfo.installed} → {versionInfo.latest}. Run this in a terminal:
+              {versionInfo.installed} → {versionInfo.latest}. Update now or run manually:
             </div>
             <div
               style={{
@@ -507,6 +527,33 @@ function AboutSection() {
               >
                 {copied ? <Check size={11} /> : <Copy size={11} />}
               </button>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                data-clui-no-drag="true"
+                onClick={onRunUpgrade}
+                disabled={upgrading}
+                style={{
+                  background: colors.accent,
+                  color: colors.textOnAccent,
+                  border: 'none',
+                  borderRadius: 'var(--clui-radius-sm, 6px)',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  padding: '5px 10px',
+                  cursor: upgrading ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+                title="Open a terminal and run the upgrade command"
+              >
+                <ArrowUpRight size={11} weight="bold" />
+                {upgrading ? 'Launching…' : 'Update now'}
+              </button>
+              {upgradeError && (
+                <span style={{ fontSize: 10, color: colors.statusError }}>{upgradeError}</span>
+              )}
             </div>
           </div>
         </div>

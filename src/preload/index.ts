@@ -88,6 +88,8 @@ export interface CluiAPI {
   onBackgroundAgentUpdate(callback: (record: BackgroundAgentRecord) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
   checkClaudeVersion(force?: boolean): Promise<ClaudeVersionInfo>
+  /** Phase G — open a terminal and run the upgrade command. */
+  upgradeClaudeCLI(command?: string): Promise<boolean>
   btwPrompt(opts: BtwOptions): Promise<void>
   onBtwEvent(callback: (event: BtwEvent) => void): () => void
   // ─── Search ───
@@ -185,6 +187,7 @@ const api: CluiAPI = {
     return () => ipcRenderer.removeListener(IPC.CLAUDE_SETTINGS_CHANGED, handler)
   },
   checkClaudeVersion: (force) => ipcRenderer.invoke(IPC.CHECK_CLAUDE_VERSION, force),
+  upgradeClaudeCLI: (command) => ipcRenderer.invoke(IPC.UPGRADE_CLAUDE_CLI, command),
   // Phase C — agents bridge
   listAgents: () => ipcRenderer.invoke(IPC.LIST_AGENTS),
   writeAgent: (agent) => ipcRenderer.invoke(IPC.WRITE_AGENT, agent),
