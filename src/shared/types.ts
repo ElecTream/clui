@@ -642,6 +642,14 @@ export const IPC = {
   REPLAY_TAB_STATE_REQUEST: 'clui:replay-tab-state-request',
   /** pill → main → caller: full tab state including messages. */
   TAB_STATE_REPLAY: 'clui:tab-state-replay',
+  /** hub → main → pill: ask the pill (canonical tab owner) to create a
+   *  new tab. Optional working directory. The pill broadcasts the new
+   *  tab back via the existing tabs-snapshot. */
+  REQUEST_CREATE_TAB: 'clui:request-create-tab',
+  /** main → pill: forwarded request from hub to create a new tab. */
+  CREATE_TAB_REQUEST: 'clui:create-tab-request',
+  /** pill → main → caller: result of a create-tab request. */
+  CREATE_TAB_RESULT: 'clui:create-tab-result',
 
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's

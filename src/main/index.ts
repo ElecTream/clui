@@ -1111,6 +1111,35 @@ ipcMain.on(IPC.TAB_STATE_REPLAY, (_e, replyId: string, state: unknown | null) =>
   if (resolver) resolver(state)
 })
 
+/**
+ * Hub → pill create-tab broker. The hub (host window) can't add a tab
+ * to its local store and call it done — the pill is the canonical owner
+ * of tab metadata, only the pill broadcasts tabs-snapshot. So when the
+ * hub wants to start a chat, it forwards the request through main; the
+ * pill creates the tab via its existing store action; the new tab
+ * propagates back via tabs-snapshot. Same correlation pattern as the
+ * tab-replay broker.
+ */
+const pendingCreateTab = new Map<string, (result: { tabId: string } | null) => void>()
+ipcMain.handle(IPC.REQUEST_CREATE_TAB, async (_e, workingDirectory?: string) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null
+  const replyId = `mktab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  return new Promise<{ tabId: string } | null>((resolve) => {
+    const finish = (result: { tabId: string } | null): void => {
+      pendingCreateTab.delete(replyId)
+      clearTimeout(timer)
+      resolve(result)
+    }
+    pendingCreateTab.set(replyId, finish)
+    const timer = setTimeout(() => finish(null), 5000)
+    mainWindow!.webContents.send(IPC.CREATE_TAB_REQUEST, replyId, workingDirectory)
+  })
+})
+ipcMain.on(IPC.CREATE_TAB_RESULT, (_e, replyId: string, result: { tabId: string } | null) => {
+  const resolver = pendingCreateTab.get(replyId)
+  if (resolver) resolver(result)
+})
+
 ipcMain.handle(IPC.CLOSE_POPOUT, (_e, tabId?: string) => {
   // tabId omitted → close the popout the call came from. With a tabId,
   // close the matching popout regardless of caller.

@@ -74,6 +74,21 @@ export default function App() {
     })
   }, [])
 
+  // Hub asks the pill to create a new tab (optionally in a directory).
+  // Pill is the canonical tab owner — it creates locally, snapshot
+  // propagates to the hub. We reply with the new tabId so the hub can
+  // optimistically focus the new chat.
+  useEffect(() => {
+    return window.clui.onCreateTabRequest?.((replyId, workingDirectory) => {
+      const create = workingDirectory
+        ? useSessionStore.getState().createTabInDirectory(workingDirectory)
+        : useSessionStore.getState().createTab()
+      void create
+        .then((tabId) => window.clui.sendCreateTabResult?.(replyId, { tabId }))
+        .catch(() => window.clui.sendCreateTabResult?.(replyId, null))
+    })
+  }, [])
+
   const activeTabStatus = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.status)
   const addAttachments = useSessionStore((s) => s.addAttachments)
   const colors = useColors()

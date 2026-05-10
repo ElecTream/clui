@@ -108,6 +108,13 @@ export interface CluiAPI {
   onReplayTabStateRequest(callback: (replyId: string, tabId: string) => void): () => void
   /** Pill replies to a replay request with the full tab state. */
   sendTabStateReplay(replyId: string, state: unknown | null): void
+
+  /** Hub asks the pill to create a tab (optionally in a specific directory). */
+  requestCreateTab(workingDirectory?: string): Promise<{ tabId: string } | null>
+  /** Pill listens for forwarded create-tab requests. */
+  onCreateTabRequest(callback: (replyId: string, workingDirectory?: string) => void): () => void
+  /** Pill replies to a create-tab request with the new tab's id. */
+  sendCreateTabResult(replyId: string, result: { tabId: string } | null): void
   peerImportSession(args: PeerImportRequest): Promise<void>
   onPeerServerState(callback: (state: PeerServerState) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
@@ -253,6 +260,18 @@ const api: CluiAPI = {
   },
   sendTabStateReplay: (replyId: string, state: unknown | null) => {
     ipcRenderer.send(IPC.TAB_STATE_REPLAY, replyId, state)
+  },
+
+  requestCreateTab: (workingDirectory?: string) =>
+    ipcRenderer.invoke(IPC.REQUEST_CREATE_TAB, workingDirectory),
+  onCreateTabRequest: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, replyId: string, workingDirectory?: string) =>
+      callback(replyId, workingDirectory)
+    ipcRenderer.on(IPC.CREATE_TAB_REQUEST, handler)
+    return () => ipcRenderer.removeListener(IPC.CREATE_TAB_REQUEST, handler)
+  },
+  sendCreateTabResult: (replyId: string, result: { tabId: string } | null) => {
+    ipcRenderer.send(IPC.CREATE_TAB_RESULT, replyId, result)
   },
   peerImportSession: (args) => ipcRenderer.invoke(IPC.PEER_IMPORT_SESSION, args),
   onPeerServerState: (callback) => {

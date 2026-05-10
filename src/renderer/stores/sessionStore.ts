@@ -121,6 +121,9 @@ interface State {
   /** Phase F (rename) — change a tab's user-visible title. */
   renameTab: (tabId: string, title: string) => void
   createTab: () => Promise<string>
+  /** Like createTab but pins the working directory + sets hasChosenDirectory.
+   *  Used when the hub starts a chat from a folder picker. */
+  createTabInDirectory: (workingDirectory: string) => Promise<string>
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   clearTab: () => void
@@ -472,6 +475,32 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
     } catch {
       const tab = makeLocalTab()
       tab.workingDirectory = homeDir
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+      }))
+      return tab.id
+    }
+  },
+
+  createTabInDirectory: async (workingDirectory: string) => {
+    try {
+      const { tabId } = await window.clui.createTab()
+      const tab: TabState = {
+        ...makeLocalTab(),
+        id: tabId,
+        workingDirectory,
+        hasChosenDirectory: true,
+      }
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+      }))
+      return tabId
+    } catch {
+      const tab = makeLocalTab()
+      tab.workingDirectory = workingDirectory
+      tab.hasChosenDirectory = true
       set((s) => ({
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,

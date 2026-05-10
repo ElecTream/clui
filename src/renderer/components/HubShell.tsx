@@ -9,7 +9,10 @@ import {
   FolderOpen,
   GlobeHemisphereWest,
   ArrowsOutCardinal,
+  ArrowLeft,
+  X as XIcon,
 } from '@phosphor-icons/react'
+import type { TabState } from '../../shared/types'
 import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import { SettingsPanel } from './SettingsPanel'
@@ -157,33 +160,317 @@ function NavItem({
 
 /* ─── Chat ─── */
 
+/**
+ * Chat view — two modes:
+ *
+ * 1. Board (default): grid of cards, one per tab. New chat button on
+ *    the toolbar starts a chat in a chosen directory, or in $HOME.
+ *    Click a card → focus mode for that tab.
+ * 2. Focus: full ConversationView for the selected card, with a back
+ *    button to return to the board and a Pop-out button to spawn a
+ *    dedicated window.
+ *
+ * The board reads from the host's local `tabs[]`, which is kept in sync
+ * with the pill via Phase D's tabs-snapshot. Tab creation is round-tripped
+ * through main → pill (the canonical owner) so a freshly-created tab
+ * always lands in both stores.
+ */
 function ChatView() {
   const colors = useColors()
-  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  const tabs = useSessionStore((s) => s.tabs)
+  const activeTabId = useSessionStore((s) => s.activeTabId)
+  const selectTab = useSessionStore((s) => s.selectTab)
+  const closeTab = useSessionStore((s) => s.closeTab)
+  // Local board ↔ focus mode. Independent of the pill's expanded state.
+  const [focusedTabId, setFocusedTabId] = useState<string | null>(null)
+  const focusedTab = tabs.find((t) => t.id === focusedTabId)
 
-  if (!tab) {
-    return (
+  // If we focus a tab, sync activeTabId so ConversationView renders it.
+  useEffect(() => {
+    if (focusedTabId && activeTabId !== focusedTabId) {
+      selectTab(focusedTabId)
+    }
+  }, [focusedTabId, activeTabId, selectTab])
+
+  // If the focused tab disappears (closed in pill), drop back to the board.
+  useEffect(() => {
+    if (focusedTabId && !tabs.some((t) => t.id === focusedTabId)) {
+      setFocusedTabId(null)
+    }
+  }, [focusedTabId, tabs])
+
+  if (focusedTab) {
+    return <FocusedChat tab={focusedTab} onBack={() => setFocusedTabId(null)} />
+  }
+
+  return (
+    <TabsBoard
+      tabs={tabs}
+      activeTabId={activeTabId}
+      onOpen={(id) => setFocusedTabId(id)}
+      onClose={(id) => closeTab(id)}
+    />
+  )
+}
+
+function TabsBoard({
+  tabs,
+  activeTabId,
+  onOpen,
+  onClose,
+}: {
+  tabs: TabState[]
+  activeTabId: string | null
+  onOpen: (tabId: string) => void
+  onClose: (tabId: string) => void
+}) {
+  const colors = useColors()
+
+  const onNewChatHere = async (): Promise<void> => {
+    const result = await window.clui.requestCreateTab?.()
+    if (result?.tabId) onOpen(result.tabId)
+  }
+  const onNewChatInDir = async (): Promise<void> => {
+    const dir = await window.clui.selectDirectory()
+    if (!dir) return
+    const result = await window.clui.requestCreateTab?.(dir)
+    if (result?.tabId) onOpen(result.tabId)
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div
         style={{
-          flex: 1,
+          flexShrink: 0,
+          padding: 'var(--clui-space-3) var(--clui-space-4)',
+          borderBottom: `1px solid ${colors.containerBorder}`,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          color: colors.textTertiary,
-          fontSize: 12,
-          padding: 'var(--clui-space-5)',
-          textAlign: 'center',
+          gap: 'var(--clui-space-2)',
+          background: colors.containerBg,
         }}
       >
-        No active conversation. Send a message from the pill to start one.
+        <span style={{ flex: 1, color: colors.textPrimary, fontSize: 13, fontWeight: 500 }}>
+          Chats {tabs.length > 0 && <span style={{ color: colors.textTertiary, fontWeight: 400 }}>· {tabs.length}</span>}
+        </span>
+        <ToolbarButton onClick={() => { void onNewChatHere() }} icon={<Plus size={11} />} label="New chat" />
+        <ToolbarButton onClick={() => { void onNewChatInDir() }} icon={<FolderOpen size={11} />} label="In folder…" />
       </div>
-    )
-  }
 
-  const onPopOut = (): void => {
-    void window.clui.popoutTab?.(tab.id).catch(() => {})
-  }
+      <div style={{ flex: 1, overflow: 'auto', padding: 'var(--clui-space-4)' }}>
+        {tabs.length === 0 ? (
+          <div style={{ color: colors.textTertiary, fontSize: 12, textAlign: 'center', padding: 'var(--clui-space-5)' }}>
+            No chats yet. Click <strong>New chat</strong> or <strong>In folder…</strong> to start one.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 'var(--clui-space-3)',
+            }}
+          >
+            {tabs.map((t) => (
+              <TabCard
+                key={t.id}
+                tab={t}
+                isActive={t.id === activeTabId}
+                onOpen={() => onOpen(t.id)}
+                onPopOut={() => { void window.clui.popoutTab?.(t.id).catch(() => {}) }}
+                onClose={() => onClose(t.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
+function TabCard({
+  tab,
+  isActive,
+  onOpen,
+  onPopOut,
+  onClose,
+}: {
+  tab: TabState
+  isActive: boolean
+  onOpen: () => void
+  onPopOut: () => void
+  onClose: () => void
+}) {
+  const colors = useColors()
+  const [hover, setHover] = useState(false)
+  const lastMessage = tab.messages[tab.messages.length - 1]
+  const preview = lastMessage
+    ? extractPreview(lastMessage)
+    : tab.hasChosenDirectory ? 'No messages yet — type to start.' : 'New chat'
+  const statusInfo = describeStatus(tab.status)
+
+  return (
+    <div
+      onClick={onOpen}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: hover || isActive ? colors.surfaceActive : colors.surfacePrimary,
+        border: `1px solid ${isActive ? colors.accent : colors.containerBorder}`,
+        borderRadius: 'var(--clui-radius-md, 10px)',
+        padding: 'var(--clui-space-3) var(--clui-space-4)',
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        position: 'relative',
+        transition: 'background var(--clui-state-duration, 120ms) var(--clui-ease-out, ease-out)',
+        minHeight: 110,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <span
+          style={{
+            color: colors.textPrimary,
+            fontSize: 13,
+            fontWeight: 500,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {tab.title || 'Untitled'}
+        </span>
+        <span
+          title={statusInfo.label}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            background: statusInfo.color(colors),
+            flexShrink: 0,
+            marginTop: 5,
+          }}
+        />
+      </div>
+      <div
+        style={{
+          color: colors.textTertiary,
+          fontSize: 11,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <FolderOpen size={11} />
+        {shortPath(tab.workingDirectory)}
+      </div>
+      <div
+        style={{
+          color: colors.textSecondary,
+          fontSize: 11,
+          lineHeight: 1.4,
+          flex: 1,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {preview}
+      </div>
+      {hover && (
+        <div
+          style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <CardIconButton
+            onClick={onPopOut}
+            title="Pop into its own window"
+            icon={<ArrowsOutCardinal size={11} />}
+          />
+          <CardIconButton
+            onClick={onClose}
+            title="Close chat"
+            icon={<XIcon size={11} />}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CardIconButton({
+  onClick,
+  title,
+  icon,
+}: {
+  onClick: () => void
+  title: string
+  icon: React.ReactNode
+}) {
+  const colors = useColors()
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: colors.surfacePrimary,
+        border: `1px solid ${colors.containerBorder}`,
+        color: colors.textTertiary,
+        cursor: 'pointer',
+        padding: 3,
+        borderRadius: 4,
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      {icon}
+    </button>
+  )
+}
+
+function ToolbarButton({
+  onClick,
+  icon,
+  label,
+}: {
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  const colors = useColors()
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: hover ? colors.surfaceActive : colors.surfacePrimary,
+        border: `1px solid ${colors.containerBorder}`,
+        color: colors.textPrimary,
+        cursor: 'pointer',
+        padding: '5px 10px',
+        borderRadius: 'var(--clui-radius-sm, 6px)',
+        fontSize: 11,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+      }}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function FocusedChat({ tab, onBack }: { tab: TabState; onBack: () => void }) {
+  const colors = useColors()
   return (
     <div
       style={{
@@ -198,16 +485,48 @@ function ChatView() {
       <div
         style={{
           flexShrink: 0,
-          height: 28,
+          height: 32,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          gap: 6,
           padding: '0 var(--clui-space-3)',
           borderBottom: `1px solid ${colors.containerBorder}`,
         }}
       >
         <button
-          onClick={onPopOut}
+          onClick={onBack}
+          title="Back to chats"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: colors.textTertiary,
+            cursor: 'pointer',
+            padding: '4px 6px',
+            borderRadius: 'var(--clui-radius-sm, 6px)',
+            fontSize: 11,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <ArrowLeft size={11} />
+          Chats
+        </button>
+        <span
+          style={{
+            color: colors.textPrimary,
+            fontSize: 12,
+            fontWeight: 500,
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {tab.title || 'Untitled'}
+        </span>
+        <button
+          onClick={() => { void window.clui.popoutTab?.(tab.id).catch(() => {}) }}
           title="Pop this chat into its own window"
           style={{
             background: 'transparent',
@@ -221,8 +540,6 @@ function ChatView() {
             alignItems: 'center',
             gap: 4,
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textTertiary }}
         >
           <ArrowsOutCardinal size={11} />
           Pop out
@@ -231,6 +548,44 @@ function ChatView() {
       <ConversationView />
     </div>
   )
+}
+
+function describeStatus(status: TabState['status']): {
+  label: string
+  color: (c: ReturnType<typeof useColors>) => string
+} {
+  switch (status) {
+    case 'running':
+      return { label: 'Running', color: (c) => c.statusRunning }
+    case 'connecting':
+      return { label: 'Connecting', color: (c) => c.textTertiary }
+    case 'failed':
+      return { label: 'Failed', color: (c) => c.statusError }
+    case 'background':
+      return { label: 'Running in background', color: (c) => c.statusRunning }
+    case 'completed':
+    case 'dead':
+    case 'idle':
+    default:
+      return { label: 'Idle', color: (c) => c.textTertiary }
+  }
+}
+
+function extractPreview(message: TabState['messages'][number]): string {
+  const m = message as { content?: unknown; text?: unknown; type?: unknown }
+  const direct = typeof m.text === 'string' ? m.text : null
+  if (direct) return collapse(direct)
+  if (Array.isArray(m.content)) {
+    for (const part of m.content as Array<{ type?: string; text?: string }>) {
+      if (part?.type === 'text' && typeof part.text === 'string') return collapse(part.text)
+    }
+  }
+  if (typeof m.content === 'string') return collapse(m.content)
+  return collapse(`(${String(m.type ?? 'message')})`)
+}
+
+function collapse(s: string): string {
+  return s.replace(/\s+/g, ' ').trim().slice(0, 200)
 }
 
 /* ─── Home ─── */
@@ -267,9 +622,10 @@ function HomeView({ setView }: { setView: (v: HubView) => void }) {
         <ActionCard
           icon={<Plus size={18} />}
           title="New chat"
-          subtitle="Spawn a new tab in the pill"
+          subtitle="Start a chat in your home folder"
           onClick={async () => {
-            await window.clui.createTab()
+            const result = await window.clui.requestCreateTab?.()
+            if (result?.tabId) setView('chat')
           }}
         />
         <ActionCard
@@ -279,10 +635,15 @@ function HomeView({ setView }: { setView: (v: HubView) => void }) {
           onClick={async () => {
             const dir = await window.clui.selectDirectory()
             if (!dir) return
-            await window.clui.createTab()
-            // Folder gets attached on the next message; setting CWD via the
-            // pill's tab-mutator would require a pill-side action.
+            const result = await window.clui.requestCreateTab?.(dir)
+            if (result?.tabId) setView('chat')
           }}
+        />
+        <ActionCard
+          icon={<ChatCircleText size={18} />}
+          title="View chats"
+          subtitle="Open chats board"
+          onClick={() => setView('chat')}
         />
         <ActionCard
           icon={<ClockClockwise size={18} />}
