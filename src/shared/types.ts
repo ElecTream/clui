@@ -553,6 +553,7 @@ export const IPC = {
   HIDE_WINDOW: 'clui:hide-window',
   WINDOW_SHOWN: 'clui:window-shown',
   ACTIVATE_TAB_BY_INDEX: 'clui:activate-tab-by-index',
+  ACTIVATE_TAB_BY_ID: 'clui:activate-tab-by-id',
   RESET_WINDOW_POSITION: 'clui:reset-window-position',
   IS_VISIBLE: 'clui:is-visible',
 
@@ -627,6 +628,7 @@ export const IPC = {
   PEER_IMPORT_SESSION: 'clui:peer-import-session',
   PEER_GENERATE_SECRET: 'clui:peer-generate-secret',
   PEER_GET_LOCAL_INFO: 'clui:peer-get-local-info',
+  PEER_LIST_TAILSCALE_PEERS: 'clui:peer-list-tailscale-peers',
 
   // Phase 0.1 — tethered host window (separate solid BrowserWindow that
   // holds Conversation/Settings/Marketplace/etc., decoupled from the pill's
@@ -711,6 +713,14 @@ export interface PeerImportRequest {
   port?: number
   projectPath: string
   sessionId: string
+}
+
+/** Tailnet peer surfaced by `tailscale status --json` for autocomplete. */
+export interface DiscoveredPeer {
+  hostname: string
+  dnsName: string
+  online: boolean
+  os: string
 }
 
 /** Phase C — Subagent definition stored in ~/.claude/agents/<name>.md. */

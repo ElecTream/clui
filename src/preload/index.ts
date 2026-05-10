@@ -26,6 +26,7 @@ import type {
   PeerSessionMeta,
   PeerServerState,
   PeerImportRequest,
+  DiscoveredPeer,
 } from '../shared/types'
 
 export interface CluiAPI {
@@ -96,6 +97,7 @@ export interface CluiAPI {
   peerServerStop(): Promise<PeerServerState>
   peerGenerateSecret(): Promise<PeerServerState>
   peerListSessions(args: { hostname: string; secret: string; port?: number }): Promise<PeerSessionMeta[]>
+  peerListTailscalePeers(): Promise<DiscoveredPeer[]>
   peerImportSession(args: PeerImportRequest): Promise<void>
   onPeerServerState(callback: (state: PeerServerState) => void): () => void
   /** Phase G — installed vs latest Claude CLI; cached 1h. */
@@ -138,6 +140,7 @@ export interface CluiAPI {
   onSkillStatus(callback: (status: { name: string; state: string; error?: string; reason?: string }) => void): () => void
   onWindowShown(callback: () => void): () => void
   onActivateTabByIndex(callback: (index: number) => void): () => void
+  onActivateTabById(callback: (tabId: string) => void): () => void
 
   // ─── Auto-update ───
   checkForUpdate(): Promise<void>
@@ -227,6 +230,7 @@ const api: CluiAPI = {
   peerServerStop: () => ipcRenderer.invoke(IPC.PEER_SERVER_STOP),
   peerGenerateSecret: () => ipcRenderer.invoke(IPC.PEER_GENERATE_SECRET),
   peerListSessions: (args) => ipcRenderer.invoke(IPC.PEER_LIST_SESSIONS, args),
+  peerListTailscalePeers: () => ipcRenderer.invoke(IPC.PEER_LIST_TAILSCALE_PEERS),
   peerImportSession: (args) => ipcRenderer.invoke(IPC.PEER_IMPORT_SESSION, args),
   onPeerServerState: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, state: PeerServerState) => callback(state)
@@ -315,6 +319,12 @@ const api: CluiAPI = {
     const handler = (_e: Electron.IpcRendererEvent, index: number) => callback(index)
     ipcRenderer.on(IPC.ACTIVATE_TAB_BY_INDEX, handler)
     return () => ipcRenderer.removeListener(IPC.ACTIVATE_TAB_BY_INDEX, handler)
+  },
+
+  onActivateTabById: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, tabId: string) => callback(tabId)
+    ipcRenderer.on(IPC.ACTIVATE_TAB_BY_ID, handler)
+    return () => ipcRenderer.removeListener(IPC.ACTIVATE_TAB_BY_ID, handler)
   },
 
   // ─── Auto-update ───

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { GlobeHemisphereWest, Power, Copy, ArrowsClockwise, ArrowDown, Warning } from '@phosphor-icons/react'
 import { useColors } from '../theme'
-import type { PeerServerState, PeerSessionMeta } from '../../shared/types'
+import type { PeerServerState, PeerSessionMeta, DiscoveredPeer } from '../../shared/types'
 
 /**
  * PeerBrowser — Phase H (cross-machine session resume via Tailscale).
@@ -28,10 +28,20 @@ export function PeerBrowser() {
   const [importingId, setImportingId] = useState<string | null>(null)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [copiedSecret, setCopiedSecret] = useState(false)
+  const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([])
 
   useEffect(() => {
     void refreshLocal()
     return window.clui.onPeerServerState?.((state) => setLocal(state))
+  }, [])
+
+  useEffect(() => {
+    // Phase H discovery — populate the hostname autocomplete from
+    // `tailscale status --json`. Failures are silent: if Tailscale isn't
+    // installed the dropdown stays empty and the user types manually.
+    void window.clui.peerListTailscalePeers?.().then((peers) => {
+      if (peers) setDiscoveredPeers(peers)
+    }).catch(() => {})
   }, [])
 
   const refreshLocal = async (): Promise<void> => {
@@ -181,9 +191,21 @@ export function PeerBrowser() {
             <input
               value={peerHost}
               onChange={(e) => setPeerHost(e.target.value)}
-              placeholder="other-machine"
+              placeholder={discoveredPeers.length > 0 ? 'pick or type' : 'other-machine'}
+              list="tailscale-peers"
               style={inputStyle(colors)}
             />
+            {discoveredPeers.length > 0 && (
+              <datalist id="tailscale-peers">
+                {discoveredPeers.map((p) => (
+                  <option key={p.hostname} value={p.hostname}>
+                    {p.online ? '● ' : '○ '}
+                    {p.dnsName || p.hostname}
+                    {p.os ? ` (${p.os})` : ''}
+                  </option>
+                ))}
+              </datalist>
+            )}
           </Field>
           <Field label="Secret" colors={colors}>
             <input

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, protocol, net, desktopCapturer, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences, protocol, net, desktopCapturer, clipboard, Notification } from 'electron'
 import { execFile, spawn } from 'child_process'
 import { basename, join, resolve, normalize } from 'path'
 import { existsSync, readdirSync, statSync, createReadStream, mkdirSync, writeFileSync, chmodSync } from 'fs'
@@ -34,6 +34,12 @@ let screenshotCounter = 0
 let toggleSequence = 0
 let forceQuit = false
 let lastWindowBounds: Electron.Rectangle | null = null
+
+// Module-scope so the background-agent registry (constructed before app-ready)
+// and the auto-updater (which lands inside app.whenReady) can both ask the
+// tray to re-render. The function only fires once tray + the menu builder
+// have been wired up inside whenReady.
+let rebuildTrayMenu: (() => void) = () => {}
 
 // Feature flag: enable PTY interactive permissions transport
 const INTERACTIVE_PTY = process.env.CLUI_INTERACTIVE_PERMISSIONS_PTY === '1'
@@ -1305,6 +1311,11 @@ ipcMain.handle(IPC.PEER_LIST_SESSIONS, async (_e, args: { hostname: string; secr
   return listPeerSessions(args)
 })
 
+ipcMain.handle(IPC.PEER_LIST_TAILSCALE_PEERS, async () => {
+  const { listTailscalePeers } = await import('./cross-machine/peer-discovery.js')
+  return listTailscalePeers()
+})
+
 ipcMain.handle(IPC.PEER_IMPORT_SESSION, async (_e, args: import('../shared/types').PeerImportRequest) => {
   await importPeerSession(
     { hostname: args.hostname, secret: args.secret, port: args.port },
@@ -1346,12 +1357,22 @@ ipcMain.handle(IPC.UPGRADE_CLAUDE_CLI, async (_e, command?: string) => {
 // subscribes to controlPlane events from construction.
 import { BackgroundAgentRegistry } from './claude/background-registry.js'
 const backgroundAgents = new BackgroundAgentRegistry(controlPlane)
+// Tracks which agents have already fired a completion notification so a
+// duplicate 'update' (e.g. tab-status-change safety net) doesn't double-notify.
+const notifiedAgents = new Set<string>()
 backgroundAgents.on('update', (record: import('../shared/types').BackgroundAgentRecord) => {
   broadcast(IPC.BACKGROUND_AGENT_UPDATE, record)
   updateTrayBadge()
+  rebuildTrayMenu()
+  if (record.status !== 'running' && !notifiedAgents.has(record.tabId)) {
+    notifiedAgents.add(record.tabId)
+    fireAgentCompletionNotification(record)
+  }
 })
-backgroundAgents.on('removed', () => {
+backgroundAgents.on('removed', (tabId: string) => {
+  notifiedAgents.delete(tabId)
   updateTrayBadge()
+  rebuildTrayMenu()
 })
 
 function updateTrayBadge(): void {
@@ -1363,6 +1384,50 @@ function updateTrayBadge(): void {
   } else {
     tray.setToolTip(baseTitle)
   }
+}
+
+function fireAgentCompletionNotification(
+  record: import('../shared/types').BackgroundAgentRecord,
+): void {
+  if (!Notification.isSupported()) return
+  const goalSnippet = record.goal.length > 80
+    ? record.goal.slice(0, 77) + '…'
+    : record.goal
+  let title: string
+  let body: string
+  switch (record.status) {
+    case 'completed': {
+      const cost = record.costUsd != null ? ` · $${record.costUsd.toFixed(2)}` : ''
+      const turns = record.turnsUsed != null ? ` · ${record.turnsUsed} turn${record.turnsUsed === 1 ? '' : 's'}` : ''
+      title = 'Background agent finished'
+      body = `${goalSnippet}${turns}${cost}`
+      break
+    }
+    case 'budget_exceeded':
+      title = 'Background agent — budget exceeded'
+      body = goalSnippet
+      break
+    case 'cancelled':
+      // User-initiated: skip the notification — they know.
+      return
+    case 'failed':
+      title = 'Background agent failed'
+      body = record.failureReason ? `${goalSnippet} — ${record.failureReason}` : goalSnippet
+      break
+    default:
+      return
+  }
+  const n = new Notification({ title, body, silent: false })
+  n.on('click', () => {
+    showWindow('agent notification')
+    if (hostWindow && !hostWindow.isDestroyed()) {
+      hostWindow.show()
+      hostWindow.focus()
+    }
+    // Ask the renderer to switch to the relevant tab.
+    broadcast(IPC.ACTIVATE_TAB_BY_ID, record.tabId)
+  })
+  n.show()
 }
 
 ipcMain.handle(IPC.START_BACKGROUND_AGENT, async (_e, input: import('../shared/types').StartBackgroundAgentInput) => {
@@ -2939,7 +3004,7 @@ app.whenReady().then(async () => {
 
   let pendingUpdateVersion: string | null = null
 
-  function rebuildTrayMenu(): void {
+  rebuildTrayMenu = function rebuildTrayMenuImpl(): void {
     if (!tray) return
     const hostShortcutLabel = process.platform === 'darwin' ? 'Alt+Shift+Space' : 'Ctrl+Alt+H'
     const hostVisible = !!(hostWindow && !hostWindow.isDestroyed() && hostWindow.isVisible())
@@ -2950,12 +3015,46 @@ app.whenReady().then(async () => {
         click: () => toggleHostWindow(),
       },
     ]
+    // ─── Background agents — running list ───
+    // Show running agents inline so the user can stop or jump to one without
+    // opening the launcher. Once an agent finishes the registry evicts it
+    // (after ~30s) and the entry disappears.
+    const runningAgents = backgroundAgents.list().filter((a) => a.status === 'running')
+    if (runningAgents.length > 0) {
+      items.push({ type: 'separator' })
+      items.push({ label: `Background agents (${runningAgents.length})`, enabled: false })
+      for (const agent of runningAgents) {
+        const goalShort = agent.goal.length > 40 ? agent.goal.slice(0, 37) + '…' : agent.goal
+        items.push({
+          label: goalShort,
+          submenu: [
+            {
+              label: 'Open chat',
+              click: () => {
+                showWindow('tray submenu')
+                if (hostWindow && !hostWindow.isDestroyed()) {
+                  hostWindow.show()
+                  hostWindow.focus()
+                }
+                broadcast(IPC.ACTIVATE_TAB_BY_ID, agent.tabId)
+              },
+            },
+            {
+              label: 'Stop',
+              click: () => { backgroundAgents.stop(agent.tabId).catch(() => {}) },
+            },
+          ],
+        })
+      }
+    }
     if (pendingUpdateVersion) {
+      items.push({ type: 'separator' })
       items.push({
         label: `Restart to update (v${pendingUpdateVersion})`,
         click: () => { setImmediate(() => { forceQuit = true; autoUpdater.quitAndInstall() }) },
       })
     }
+    items.push({ type: 'separator' })
     items.push({ label: 'Quit', click: () => { app.quit() } })
     tray.setContextMenu(Menu.buildFromTemplate(items))
   }

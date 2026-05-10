@@ -175,6 +175,19 @@ export default function App() {
     return off
   }, [])
 
+  // Background-agent completion notifications + tray "Open chat" menu items
+  // both fire ACTIVATE_TAB_BY_ID. Resolve the id → selectTab so the user
+  // lands on the finished agent's conversation.
+  useEffect(() => {
+    const off = window.clui.onActivateTabById((tabId: string) => {
+      const { tabs, selectTab } = useSessionStore.getState()
+      if (tabs.some((t) => t.id === tabId)) {
+        selectTab(tabId)
+      }
+    })
+    return off
+  }, [])
+
   return (
     <PopoverLayerProvider>
       <div className="flex flex-col justify-end h-full" style={{ background: 'transparent' }}>
