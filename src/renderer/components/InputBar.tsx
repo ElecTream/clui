@@ -668,6 +668,15 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
       requestAnimationFrame(() => textareaRef.current?.focus())
       return
     }
+    if (cmd.command === '/rename') {
+      // Prefill so the user can type the new title inline (e.g.
+      // "/rename Refactor auth flow"). On submit the /rename
+      // interception in handleSend grabs the rest of the line.
+      setInput('/rename ')
+      setSlashFilter(null)
+      requestAnimationFrame(() => textareaRef.current?.focus())
+      return
+    }
     if (cmd.command === '/compact') {
       clearAttachments()
       setInput('')
@@ -703,6 +712,28 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
       }
     }
     const prompt = input.trim()
+    // ─── /rename interception ───
+    const renameMatch = prompt.match(/^\/rename(?:\s+(.+))?$/i)
+    if (renameMatch) {
+      const newTitle = (renameMatch[1] || '').trim()
+      if (!tab?.id) {
+        setInput('')
+        setSlashFilter(null)
+        addSystemMessage('No active chat to rename.')
+        return
+      }
+      const finalTitle = newTitle || (typeof window !== 'undefined' ? window.prompt('Rename chat to:') ?? '' : '').trim()
+      if (!finalTitle.trim()) {
+        setInput('')
+        setSlashFilter(null)
+        return
+      }
+      useSessionStore.getState().renameTab(tab.id, finalTitle.trim())
+      setInput('')
+      setSlashFilter(null)
+      addSystemMessage(`Renamed chat to "${finalTitle.trim()}".`)
+      return
+    }
     const modelMatch = prompt.match(/^\/model\s+(\S+)/i)
     if (modelMatch) {
       const query = modelMatch[1].toLowerCase()
@@ -942,6 +973,11 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
       <div className="w-full" style={{ minHeight: 50 }}>
         {isMultiLine ? (
           <div className="w-full">
+            {/* Status chip persists across multi-line — sits above the
+                textarea so it doesn't fight for vertical space. */}
+            <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6, paddingBottom: 2 }}>
+              <ChatStatusChip />
+            </div>
             <div style={{ position: 'relative' }}>
               <textarea
                 ref={textareaRef}
@@ -1033,7 +1069,8 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
             </div>
           </div>
         ) : (
-          <div className="flex items-center w-full" style={{ minHeight: 50 }}>
+          <div className="flex items-center w-full" style={{ minHeight: 50, gap: 8 }}>
+            <ChatStatusChip />
             <div style={{ position: 'relative', flex: 1, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}>
               <textarea
                 ref={textareaRef}
@@ -1168,6 +1205,86 @@ export const InputBar = forwardRef<InputBarHandle>(function InputBar(_props, ref
     </div>
   )
 })
+
+// ─── Chat status chip (left of textarea) ───
+
+/**
+ * Small persistent indicator at the left edge of the input pill: a
+ * colored dot for status (idle / running / waiting on permission /
+ * failed) and the chat's current name. Replaces the old TabStrip
+ * "active tab" chip — that's now empty real estate the three pickers
+ * fill.
+ */
+function ChatStatusChip() {
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
+  const colors = useColors()
+  if (!tab) return null
+
+  const needsInput = tab.permissionQueue.length > 0
+  let dotColor = colors.textTertiary
+  let dotPulse = false
+  let label = 'idle'
+  if (needsInput) {
+    dotColor = colors.accent
+    dotPulse = true
+    label = 'needs input'
+  } else if (tab.status === 'running' || tab.status === 'connecting') {
+    dotColor = colors.accent
+    dotPulse = true
+    label = tab.status === 'connecting' ? 'connecting' : 'working'
+  } else if (tab.status === 'failed' || tab.status === 'dead') {
+    dotColor = colors.statusError ?? '#d97757'
+    label = 'failed'
+  } else if (tab.status === 'background') {
+    dotColor = '#6892c2'
+    label = 'background'
+  }
+
+  const showWorkingLabel = !!tab.title && tab.title !== 'New Tab'
+
+  return (
+    <div
+      data-clui-no-drag="true"
+      title={`${label} — ${tab.title}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 0,
+        maxWidth: 200,
+        paddingLeft: 2,
+        paddingRight: 4,
+      }}
+    >
+      <span
+        aria-label={label}
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: dotColor,
+          flexShrink: 0,
+          animation: dotPulse ? 'clui-status-pulse 1.6s ease-in-out infinite' : undefined,
+        }}
+      />
+      {showWorkingLabel && (
+        <span
+          style={{
+            fontSize: 11,
+            color: colors.textTertiary,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: 180,
+          }}
+        >
+          <span style={{ color: colors.textMuted }}>working on </span>
+          <span style={{ color: colors.textSecondary }}>{tab.title}</span>
+        </span>
+      )}
+    </div>
+  )
+}
 
 // ─── Voice Buttons (extracted to avoid duplication) ───
 

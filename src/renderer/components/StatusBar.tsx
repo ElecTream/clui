@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Terminal, CaretDown, Check, ShieldCheck } from '@phosphor-icons/react'
+import { Terminal, CaretDown, Check, ShieldCheck, Lightning } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors, useThemeStore } from '../theme'
@@ -12,7 +12,11 @@ import type { PreferredTerminalId, TerminalInstallation } from '../../shared/typ
 export function ModelPicker() {
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
-  const availableModels = useSessionStore((s) => s.availableModels)
+  const allModels = useSessionStore((s) => s.availableModels)
+  // Hide pinned point-releases — the user only ever wants to flip
+  // between the (latest) alias of each family. Pinned variants are
+  // still queryable via /model in the conversation if they need one.
+  const availableModels = allModels.filter((m) => m.kind === 'alias')
   // Zustand v5 dropped the 2nd equality-fn arg; rely on default Object.is
   // reference equality. Tab object identity already changes only when the
   // array is mutated, which happens exactly when something changes.
@@ -189,7 +193,9 @@ export function PermissionModePicker() {
     setOpen((o) => !o)
   }
 
-  const isAuto = permissionMode === 'auto'
+  const modeLabel = permissionMode === 'auto' ? 'Auto' : permissionMode === 'plan' ? 'Plan' : 'Ask'
+  const modeIconWeight: 'fill' | 'regular' | 'duotone' =
+    permissionMode === 'auto' ? 'fill' : permissionMode === 'plan' ? 'duotone' : 'regular'
 
   return (
     <>
@@ -203,8 +209,8 @@ export function PermissionModePicker() {
         }}
         title="Permission mode (global)"
       >
-        <ShieldCheck size={11} weight={isAuto ? 'fill' : 'regular'} />
-        {isAuto ? 'Auto' : 'Ask'}
+        <ShieldCheck size={11} weight={modeIconWeight} />
+        {modeLabel}
         <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
       </button>
 
@@ -221,7 +227,7 @@ export function PermissionModePicker() {
             position: 'fixed',
             bottom: pos.bottom,
             left: pos.left,
-            width: 180,
+            width: 200,
             pointerEvents: 'auto',
             background: colors.popoverBg,
             backdropFilter: 'blur(20px)',
@@ -231,37 +237,173 @@ export function PermissionModePicker() {
           }}
         >
           <div className="py-1">
-            <button
+            <ModeRow
+              active={permissionMode === 'ask'}
               onClick={() => { setPermissionMode('ask'); setOpen(false) }}
-              className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
-              style={{
-                color: !isAuto ? colors.textPrimary : colors.textSecondary,
-                fontWeight: !isAuto ? 600 : 400,
-              }}
-            >
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck size={12} />
-                Ask
-              </span>
-              {!isAuto && <Check size={12} style={{ color: colors.accent }} />}
-            </button>
-
-            <div className="mx-2 my-0.5" style={{ height: 1, background: colors.popoverBorder }} />
-
-            <button
+              colors={colors}
+              icon={<ShieldCheck size={12} />}
+              label="Ask"
+              hint="Each tool call asks first"
+            />
+            <ModeRow
+              active={permissionMode === 'auto'}
               onClick={() => { setPermissionMode('auto'); setOpen(false) }}
-              className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
-              style={{
-                color: isAuto ? colors.textPrimary : colors.textSecondary,
-                fontWeight: isAuto ? 600 : 400,
-              }}
-            >
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck size={12} weight="fill" />
-                Auto
-              </span>
-              {isAuto && <Check size={12} style={{ color: colors.accent }} />}
-            </button>
+              colors={colors}
+              icon={<ShieldCheck size={12} weight="fill" />}
+              label="Auto"
+              hint="Auto-approve every tool"
+            />
+            <ModeRow
+              active={permissionMode === 'plan'}
+              onClick={() => { setPermissionMode('plan'); setOpen(false) }}
+              colors={colors}
+              icon={<ShieldCheck size={12} weight="duotone" />}
+              label="Plan"
+              hint="Reason but don't execute"
+            />
+          </div>
+        </motion.div>,
+        popoverLayer,
+      )}
+    </>
+  )
+}
+
+/* ─── Shared row used by Mode + Effort dropdowns ─── */
+
+function ModeRow({
+  active,
+  onClick,
+  colors,
+  icon,
+  label,
+  hint,
+}: {
+  active: boolean
+  onClick: () => void
+  colors: ReturnType<typeof useColors>
+  icon: React.ReactNode
+  label: string
+  hint?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
+      style={{
+        color: active ? colors.textPrimary : colors.textSecondary,
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      <span className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+        {icon}
+        <span>
+          {label}
+          {hint && (
+            <span style={{ color: colors.textTertiary, fontWeight: 400, marginLeft: 6 }}>
+              {hint}
+            </span>
+          )}
+        </span>
+      </span>
+      {active && <Check size={12} style={{ color: colors.accent }} />}
+    </button>
+  )
+}
+
+/* ─── Effort Picker (global — affects all tabs) ─── */
+
+const EFFORT_LABELS: Record<import('../../shared/types').EffortLevel, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  max: 'Max',
+}
+
+export function EffortPicker() {
+  const preferredEffort = useSessionStore((s) => s.preferredEffort)
+  const setPreferredEffort = useSessionStore((s) => s.setPreferredEffort)
+  const popoverLayer = usePopoverLayer()
+  const colors = useColors()
+
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ bottom: 0, left: 0 })
+
+  const updatePos = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setPos({
+      bottom: window.innerHeight - rect.top + 6,
+      left: rect.left,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      if (popoverRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleToggle = () => {
+    if (!open) updatePos()
+    setOpen((o) => !o)
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={handleToggle}
+        className="flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 transition-colors whitespace-nowrap flex-shrink-0"
+        style={{ color: colors.textTertiary, cursor: 'pointer' }}
+        title="Effort / thinking-budget hint"
+      >
+        <Lightning size={11} weight={preferredEffort === 'max' || preferredEffort === 'high' ? 'fill' : 'regular'} />
+        {EFFORT_LABELS[preferredEffort]}
+        <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
+      </button>
+
+      {popoverLayer && open && createPortal(
+        <motion.div
+          ref={popoverRef}
+          data-clui-ui
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={{ duration: 0.12 }}
+          className="rounded-xl"
+          style={{
+            position: 'fixed',
+            bottom: pos.bottom,
+            left: pos.left,
+            width: 200,
+            pointerEvents: 'auto',
+            background: colors.popoverBg,
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: colors.popoverShadow,
+            border: `1px solid ${colors.popoverBorder}`,
+          }}
+        >
+          <div className="py-1">
+            {(['low', 'medium', 'high', 'max'] as const).map((level) => (
+              <ModeRow
+                key={level}
+                active={preferredEffort === level}
+                onClick={() => { setPreferredEffort(level); setOpen(false) }}
+                colors={colors}
+                icon={<Lightning size={12} weight={level === 'max' || level === 'high' ? 'fill' : 'regular'} />}
+                label={EFFORT_LABELS[level]}
+              />
+            ))}
           </div>
         </motion.div>,
         popoverLayer,

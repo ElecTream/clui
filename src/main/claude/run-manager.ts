@@ -12,6 +12,26 @@ import type { ClaudeEvent, NormalizedEvent, RunOptions, EnrichedError } from '..
 const MAX_RING_LINES = 100
 const DEBUG = process.env.CLUI_DEBUG === '1'
 
+/**
+ * Effort hint, appended as a system-prompt suffix so Claude steers
+ * its thinking budget without us needing a CLI flag the upstream
+ * doesn't expose yet. Conservative phrasing — the user-facing
+ * intent is "spend more / less time thinking", not a hard budget.
+ */
+function effortHint(effort: 'low' | 'medium' | 'high' | 'max'): string {
+  switch (effort) {
+    case 'low':
+      return 'EFFORT: low. Prefer quick, direct answers. Skip extended thinking unless strictly necessary.'
+    case 'high':
+      return 'EFFORT: high. Use extended thinking generously. Consider edge cases and trade-offs before answering.'
+    case 'max':
+      return 'EFFORT: max. Reason exhaustively. Use as much extended thinking as you need to get this right.'
+    case 'medium':
+    default:
+      return 'EFFORT: medium. Balance speed and depth.'
+  }
+}
+
 // Appended to Claude's default system prompt so it knows it's running inside Clui.
 // Uses --append-system-prompt (additive) not --system-prompt (replacement).
 const CLUI_SYSTEM_HINT = [
@@ -159,13 +179,19 @@ export class RunManager extends EventEmitter {
   startRun(requestId: string, options: RunOptions): RunHandle {
     const cwd = options.projectPath === '~' ? homedir() : options.projectPath
 
+    // Permission mode: 'plan' propagates as the CLI's plan mode so
+    // Claude reasons through changes without executing them. Other
+    // user-facing modes ('ask' / 'auto') are routed via the hook
+    // server, so the spawn-time mode stays 'default'.
+    const cliPermissionMode = options.permissionMode === 'plan' ? 'plan' : 'default'
+
     const args: string[] = [
       '-p',
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
-      '--permission-mode', 'default',
+      '--permission-mode', cliPermissionMode,
     ]
 
     if (options.sessionId) {
@@ -210,6 +236,11 @@ export class RunManager extends EventEmitter {
     }
     // Always tell Claude it's inside Clui (additive, doesn't replace base prompt)
     args.push('--append-system-prompt', CLUI_SYSTEM_HINT)
+    // Effort hint — appended as a system-prompt suffix. The CLI doesn't
+    // expose a thinking-budget flag yet, so we steer behavior via prose.
+    if (options.effort) {
+      args.push('--append-system-prompt', effortHint(options.effort))
+    }
 
     if (DEBUG) {
       log(`Starting run ${requestId}: ${this.claudeBinary} ${args.join(' ')}`)

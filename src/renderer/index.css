@@ -303,6 +303,12 @@ input::placeholder {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
+/* ─── Chat-status indicator pulse (left of input) ─── */
+@keyframes clui-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 /* ─── Bouncing dots for thinking ─── */
 @keyframes bounce-dot {
   0%, 80%, 100% { transform: translateY(0); }

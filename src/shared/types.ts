@@ -362,6 +362,11 @@ export interface RunOptions {
   hookSettingsPath?: string
   /** Extra directories to add via --add-dir (session-preserving) */
   addDirs?: string[]
+  /** Permission mode override — 'plan' uses --permission-mode plan to
+   *  prevent side-effecting tools from running. */
+  permissionMode?: PermissionModeKind
+  /** Effort / thinking-budget hint, passed via --append-system-prompt. */
+  effort?: EffortLevel
 }
 
 // ─── Control Plane Types ───
@@ -474,8 +479,28 @@ export interface CatalogPlugin {
 // circle + ~10 gap on each side ≈ 720, with 10px shadow margin per side.
 // Height: ~50 toolbar + 70 input pill (60 + 10 buffer) + ~20 shadow ≈ 150.
 export const OVERLAY_BAR_WIDTH = 740
-export const OVERLAY_PILL_HEIGHT = 160
+// Window height includes a transparent dead zone above the visible
+// chrome so the model / effort / mode dropdowns can render upward
+// without being clipped by the OS window bounds. The pill chrome
+// itself only occupies the bottom ~110px; everything above is fully
+// transparent and inert (no drag, no clicks).
+export const OVERLAY_PILL_HEIGHT = 360
 export const OVERLAY_PILL_BOTTOM_MARGIN = 16
+
+/** Permission modes the user can flip the pill into.
+ * - 'ask'  — every tool call surfaces a permission card.
+ * - 'auto' — auto-approve all tool calls.
+ * - 'plan' — Claude plans the work but doesn't run any side-effecting
+ *   tools; useful for "what would you do?" without execution. */
+export type PermissionModeKind = 'ask' | 'auto' | 'plan'
+
+/** Effort / thinking-budget knob the user can flip per-conversation.
+ * The user-facing label and rough mapping the user expects:
+ *   low    → quick replies, minimal extended thinking
+ *   medium → balanced (default)
+ *   high   → deeper extended thinking budget
+ *   max    → uncapped thinking budget */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'max'
 
 // ─── IPC Channel Names ───
 

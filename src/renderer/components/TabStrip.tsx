@@ -1,19 +1,18 @@
 import React from 'react'
 import { ArrowsClockwise, DotsSixVertical } from '@phosphor-icons/react'
-import { ActiveTabChip } from './TabSwitcher'
-import { ModelPicker, PermissionModePicker } from './StatusBar'
+import { ModelPicker, PermissionModePicker, EffortPicker } from './StatusBar'
 import { useColors, useThemeStore } from '../theme'
 
 /**
  * Pill toolbar — the always-visible row above the input pill.
  *
- * Per the user's spec: pill carries the controls they reach for during
- * a chat. Everything else (history, marketplace, settings, directory
- * picker, "+ new chat") moves to the hub. The "Open in CLI" launcher
- * lives as a circle to the right of the hub circle (mirroring the
- * left-side action stack).
+ * The active chat name now lives inside the input bar ("working on
+ * <name>"), so the toolbar is purely the three knobs the user flips
+ * mid-conversation: model, effort, permission mode. Drag handle on
+ * the right; UpdateButton tucks in next to it when an upgrade is
+ * ready.
  *
- *   [active-tab indicator] [model] [mode] [optional update]
+ *   [model] | [effort] | [mode]            [drag] [update?]
  */
 
 /**
@@ -79,22 +78,9 @@ export function TabStrip() {
       style={{
         padding: 'var(--clui-space-2) var(--clui-space-3)',
         gap: 'var(--clui-space-3)',
-        // Subtle separator from the input pill below; the surface contrast
-        // does the rest of the work (per Phase 0.0 design language).
         borderBottom: `1px solid ${colors.containerBorder}`,
       }}
     >
-      <ActiveTabChip />
-
-      <div
-        style={{
-          height: 18,
-          width: 1,
-          background: colors.containerBorder,
-          flexShrink: 0,
-        }}
-      />
-
       <div
         className="flex items-center min-w-0"
         style={{
@@ -106,14 +92,16 @@ export function TabStrip() {
       >
         <ModelPicker />
         <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
+        <EffortPicker />
+        <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
         <PermissionModePicker />
-        <DragHandle />
       </div>
 
       <div
         className="flex items-center flex-shrink-0"
         style={{ gap: 'var(--clui-space-2)' }}
       >
+        <DragHandle />
         <UpdateButton />
       </div>
     </div>

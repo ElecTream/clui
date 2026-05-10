@@ -7,9 +7,11 @@ import { openInPreferredTerminal } from '../utils/terminal'
  * 'ask' | 'auto'; when 'plan' (and others) ship in a future phase we just
  * extend this array — the cycle picks them up automatically.
  */
-const PERMISSION_MODE_CYCLE: Array<'ask' | 'auto'> = ['ask', 'auto']
+import type { PermissionModeKind } from '../../shared/types'
 
-function cyclePermissionMode(current: 'ask' | 'auto', forward = true): 'ask' | 'auto' {
+const PERMISSION_MODE_CYCLE: Array<PermissionModeKind> = ['ask', 'auto', 'plan']
+
+function cyclePermissionMode(current: PermissionModeKind, forward = true): PermissionModeKind {
   const idx = PERMISSION_MODE_CYCLE.indexOf(current)
   const safeIdx = idx < 0 ? 0 : idx
   const len = PERMISSION_MODE_CYCLE.length

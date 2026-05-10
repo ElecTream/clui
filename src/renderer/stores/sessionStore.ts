@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, CatalogPlugin, PluginStatus, TodoTask, SearchIndexStatus, ModelInfo } from '../../shared/types'
+import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Attachment, CatalogPlugin, PluginStatus, TodoTask, SearchIndexStatus, ModelInfo, PermissionModeKind, EffortLevel } from '../../shared/types'
 import { useThemeStore } from '../theme'
 import notificationSrc from '../../../resources/notification.mp3'
 
@@ -34,16 +34,28 @@ export const AVAILABLE_MODELS: ReadonlyArray<{ id: string; label: string }> = FA
 
 const PERMISSION_MODE_KEY = 'clui-permission-mode'
 
-function loadPermissionMode(): 'ask' | 'auto' {
+function loadPermissionMode(): PermissionModeKind {
   try {
     const v = localStorage.getItem(PERMISSION_MODE_KEY)
-    if (v === 'ask' || v === 'auto') return v
+    if (v === 'ask' || v === 'auto' || v === 'plan') return v
   } catch {}
   return 'ask'
 }
 
-function savePermissionMode(mode: 'ask' | 'auto'): void {
+function savePermissionMode(mode: PermissionModeKind): void {
   try { localStorage.setItem(PERMISSION_MODE_KEY, mode) } catch {}
+}
+
+const EFFORT_KEY = 'clui:preferred-effort'
+function loadEffort(): EffortLevel {
+  try {
+    const v = localStorage.getItem(EFFORT_KEY)
+    if (v === 'low' || v === 'medium' || v === 'high' || v === 'max') return v
+  } catch {}
+  return 'medium'
+}
+function saveEffort(effort: EffortLevel): void {
+  try { localStorage.setItem(EFFORT_KEY, effort) } catch {}
 }
 
 // ─── Store ───
@@ -65,8 +77,11 @@ interface State {
   staticInfo: StaticInfo | null
   /** User's preferred model override (null = use default) */
   preferredModel: string | null
-  /** Global permission mode: 'ask' shows cards, 'auto' auto-approves all tool calls */
-  permissionMode: 'ask' | 'auto'
+  /** Global permission mode: 'ask' shows cards, 'auto' auto-approves
+   *  all tool calls, 'plan' lets Claude plan but not execute. */
+  permissionMode: PermissionModeKind
+  /** Global effort / thinking-budget hint, persisted across sessions. */
+  preferredEffort: EffortLevel
   /** Phase A — model registry. Populated from main via listModels() during initStaticInfo(). */
   availableModels: ModelInfo[]
   /** Detected Claude CLI version, or null if unknown / not installed. */
@@ -101,7 +116,10 @@ interface State {
   // Actions
   initStaticInfo: () => Promise<void>
   setPreferredModel: (model: string | null) => void
-  setPermissionMode: (mode: 'ask' | 'auto') => void
+  setPermissionMode: (mode: PermissionModeKind) => void
+  setPreferredEffort: (effort: EffortLevel) => void
+  /** Phase F (rename) — change a tab's user-visible title. */
+  renameTab: (tabId: string, title: string) => void
   createTab: () => Promise<string>
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
@@ -349,6 +367,7 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
   staticInfo: null,
   preferredModel: null,
   permissionMode: loadPermissionMode(),
+  preferredEffort: loadEffort(),
   // Phase A — model registry. Seeded with the fallback list; replaced
   // by listModels() in initStaticInfo() once main responds.
   availableModels: FALLBACK_MODELS,
@@ -415,7 +434,25 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
   setPermissionMode: (mode) => {
     set({ permissionMode: mode })
     savePermissionMode(mode)
-    window.clui.setPermissionMode(mode)
+    // The main-process bridge currently only knows ask/auto. 'plan' is
+    // handled at run-spawn time via --permission-mode plan; we still
+    // tell main about ask/auto for the existing hook server logic.
+    if (mode !== 'plan') {
+      window.clui.setPermissionMode(mode)
+    }
+  },
+
+  setPreferredEffort: (effort) => {
+    set({ preferredEffort: effort })
+    saveEffort(effort)
+  },
+
+  renameTab: (tabId, title) => {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title: trimmed } : t)),
+    }))
   },
 
   createTab: async () => {
@@ -1099,12 +1136,15 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
         }))
 
         // Send to backend — ControlPlane will queue if a run is active
+        const { permissionMode, preferredEffort } = get()
         await window.clui.prompt(tabId, requestId, {
           prompt: fullPrompt,
           projectPath: resolvedPath,
           sessionId: tab.claudeSessionId || undefined,
           model: preferredModel || undefined,
           addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
+          permissionMode,
+          effort: preferredEffort,
         })
       } catch (err) {
         if (!errorTabId) return
