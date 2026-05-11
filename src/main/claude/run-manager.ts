@@ -18,12 +18,14 @@ const DEBUG = process.env.CLUI_DEBUG === '1'
  * doesn't expose yet. Conservative phrasing — the user-facing
  * intent is "spend more / less time thinking", not a hard budget.
  */
-function effortHint(effort: 'low' | 'medium' | 'high' | 'max'): string {
+function effortHint(effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'): string {
   switch (effort) {
     case 'low':
       return 'EFFORT: low. Prefer quick, direct answers. Skip extended thinking unless strictly necessary.'
     case 'high':
       return 'EFFORT: high. Use extended thinking generously. Consider edge cases and trade-offs before answering.'
+    case 'xhigh':
+      return 'EFFORT: xhigh. Reason at length. Use extended thinking aggressively, verify edge cases, and check your own reasoning before answering.'
     case 'max':
       return 'EFFORT: max. Reason exhaustively. Use as much extended thinking as you need to get this right.'
     case 'medium':

@@ -1,10 +1,13 @@
 import React, { useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { useColors } from './theme'
 import { useThemeStore } from './theme'
 import HubShell from './components/HubShell'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useReceiveTabsSnapshot } from './hooks/useTabsSync'
+import { useTabBackfill } from './hooks/useTabBackfill'
+import { useSessionStore } from './stores/sessionStore'
 
 /**
  * HostApp — the host window's React root. Holds the Hub: Home, History,
@@ -18,6 +21,12 @@ export default function HostApp() {
   // ConversationView in the hub.
   useClaudeEvents()
   useReceiveTabsSnapshot()
+
+  // Backfill the active tab's history when it changes. Without this the
+  // hub would only see events fired after it opened — prior messages
+  // would be missing from the conversation view.
+  const activeTabId = useSessionStore((s) => s.activeTabId)
+  useTabBackfill(activeTabId)
 
   const colors = useColors()
   const setSystemTheme = useThemeStore((s) => s.setSystemTheme)
@@ -34,10 +43,15 @@ export default function HostApp() {
 
   return (
     <PopoverLayerProvider>
-      <div
+      <motion.div
         // Drag-from-anywhere: the entire host body is a drag region; CSS
         // opts out interactive children automatically. OS handles drag.
         data-clui-drag="true"
+        // 120ms fade-in on mount so the OS-level window show doesn't flash.
+        // Same vocabulary as the rest of the app — see Phase 5 spec.
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.12, ease: [0.2, 0, 0.1, 1] }}
         style={{
           width: '100vw',
           height: '100vh',
@@ -63,7 +77,7 @@ export default function HostApp() {
           clui · hub
         </header>
         <HubShell />
-      </div>
+      </motion.div>
     </PopoverLayerProvider>
   )
 }

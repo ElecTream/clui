@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { useColors, useThemeStore } from './theme'
 import { ConversationView } from './components/ConversationView'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useReceiveTabsSnapshot } from './hooks/useTabsSync'
+import { useTabBackfill } from './hooks/useTabBackfill'
 import { useSessionStore } from './stores/sessionStore'
-import type { TabState } from '../shared/types'
 import { ArrowsOutCardinal, X } from '@phosphor-icons/react'
 
 /**
@@ -59,32 +60,9 @@ export default function PopoutApp() {
 
   // ─── First-load history replay ───
   // The popout's local store starts empty; the live event stream only
-  // covers what fires *after* this window opens. To get the conversation
-  // up to the current point we ask the pill for a one-shot replay of the
-  // tab including its message history, then merge that into our store.
-  useEffect(() => {
-    if (!lockedTabId) return
-    let cancelled = false
-    void window.clui.requestTabReplay?.(lockedTabId).then((reply) => {
-      if (cancelled || !reply) return
-      const replayed = reply as TabState
-      useSessionStore.setState((s) => {
-        const idx = s.tabs.findIndex((t) => t.id === lockedTabId)
-        if (idx === -1) {
-          return { tabs: [...s.tabs, replayed], activeTabId: lockedTabId }
-        }
-        // Merge: trust the replay for messages + session metadata; keep
-        // our id alignment. The receiver hook may overwrite the metadata
-        // bits later via tabs-snapshot — that's fine.
-        const existing = s.tabs[idx]
-        const merged = { ...existing, ...replayed, id: existing.id }
-        const next = [...s.tabs]
-        next[idx] = merged
-        return { tabs: next, activeTabId: lockedTabId }
-      })
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [lockedTabId])
+  // covers what fires *after* this window opens. The shared backfill
+  // hook handles round-trip + race-safe message merge.
+  useTabBackfill(lockedTabId || null)
 
   // ─── Loading / missing-tab states ───
   if (!lockedTabId) {
@@ -110,7 +88,7 @@ export default function PopoutApp() {
     <PopoverLayerProvider>
       <Shell colors={colors} title={tab.title || 'Untitled'}>
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <ConversationView />
+          <ConversationView tabId={lockedTabId} />
         </div>
       </Shell>
     </PopoverLayerProvider>
@@ -127,8 +105,11 @@ function Shell({
   children: React.ReactNode
 }) {
   return (
-    <div
+    <motion.div
       data-clui-drag="true"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.12, ease: [0.2, 0, 0.1, 1] }}
       style={{
         width: '100vw',
         height: '100vh',
@@ -167,7 +148,7 @@ function Shell({
         </button>
       </header>
       {children}
-    </div>
+    </motion.div>
   )
 }
 

@@ -56,15 +56,14 @@ const PILL_BOTTOM_MARGIN = OVERLAY_PILL_BOTTOM_MARGIN
 // ─── Broadcast to renderer ───
 
 function broadcast(channel: string, ...args: unknown[]): void {
-  // Phase 0.1 — fan out to every clui-owned BrowserWindow we know about.
-  // Both pill and host renderers subscribe to the same store-sync channels
-  // so events from one (e.g. WINDOW_SHOWN, ACTIVATE_TAB_BY_INDEX) reach the
-  // other.
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(channel, ...args)
-  }
-  if (hostWindow && !hostWindow.isDestroyed()) {
-    hostWindow.webContents.send(channel, ...args)
+  // Fan out to every clui-owned BrowserWindow — pill, host, and every
+  // popout. Earlier this only sent to mainWindow + hostWindow which left
+  // popouts dead-on-arrival: they replayed once on mount, then never saw
+  // another normalized event. Mirroring the tabs-snapshot pattern at the
+  // BROADCAST_TABS_SNAPSHOT handler.
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    win.webContents.send(channel, ...args)
   }
 }
 

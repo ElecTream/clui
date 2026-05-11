@@ -30,16 +30,16 @@ const execFileAsync = promisify(execFile)
 const CURATED_MODELS: ModelInfo[] = [
   // ─── Aliases — auto-track latest ───
   {
-    id: 'sonnet',
-    label: 'Sonnet (latest)',
-    family: 'sonnet',
+    id: 'opus',
+    label: 'Opus (latest)',
+    family: 'opus',
     kind: 'alias',
     isDefault: true,
   },
   {
-    id: 'opus',
-    label: 'Opus (latest)',
-    family: 'opus',
+    id: 'sonnet',
+    label: 'Sonnet (latest)',
+    family: 'sonnet',
     kind: 'alias',
   },
   {
@@ -49,6 +49,12 @@ const CURATED_MODELS: ModelInfo[] = [
     kind: 'alias',
   },
   // ─── Pinned versions — reproducible ───
+  {
+    id: 'claude-opus-4-7',
+    label: 'Opus 4.7',
+    family: 'opus',
+    kind: 'pinned',
+  },
   {
     id: 'claude-opus-4-6',
     label: 'Opus 4.6',

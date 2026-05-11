@@ -129,6 +129,11 @@ export default function App() {
             reply({ ok: true })
             return
           }
+          case 'select-tab': {
+            store.selectTab(action.tabId)
+            reply({ ok: true })
+            return
+          }
           default: {
             // Exhaustiveness — TS will flag any unhandled discriminator.
             const _exhaustive: never = action

@@ -71,29 +71,22 @@ export function MarketplacePanel() {
     })
   }, [catalog, lowerSearch, filter, pluginStates])
 
-  // Reorder cards so expanded card sits on a full-width row with no grid gaps.
-  // If the expanded card was in the right column (odd index), its left neighbor
-  // drops below it to fill the next row — no empty cells.
-  const displayOrder = useMemo(() => {
-    if (expandedId === null) return filtered
-    const idx = filtered.findIndex((p) => p.id === expandedId)
-    if (idx === -1) return filtered
-    const expanded = filtered[idx]
-    const before = filtered.slice(0, idx)
-    const after = filtered.slice(idx + 1)
-    if (idx % 2 === 1 && before.length > 0) {
-      // Odd index (right column): move left neighbor to after the expanded card
-      const leftNeighbor = before.pop()!
-      return [...before, expanded, leftNeighbor, ...after]
-    }
-    return [...before, expanded, ...after]
-  }, [filtered, expandedId])
+  // CSS grid auto-flow handles the layout — no manual reorder needed.
+  // Expanded cards span all columns (gridColumn: 1 / -1) so the row
+  // wraps naturally regardless of how many columns the container fits.
+  const displayOrder = filtered
 
   return (
     <div
       data-clui-ui
       style={{
-        height: 470,
+        // Fill the parent (hub workspace area or pill marketplace overlay)
+        // so the panel scrolls within itself instead of overflowing. The
+        // earlier hardcoded height: 470 clipped the search row + filters
+        // whenever the host shrunk below that.
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -246,10 +239,11 @@ export function MarketplacePanel() {
         ) : (
           <div
             style={{
-              display: 'flex',
-              flexWrap: 'wrap',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
               gap: 10,
               paddingBottom: 6,
+              alignContent: 'start',
             }}
           >
             {displayOrder.map((plugin) => (
@@ -379,7 +373,9 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
         border: `1px solid ${expanded ? colors.surfaceSecondary : colors.containerBorder}`,
         background: expanded ? colors.surfaceActive : colors.surfaceHover,
         minHeight: expanded ? undefined : 154,
-        width: expanded ? '100%' : 'calc(50% - 5px)',
+        // Expanded cards span every column the grid offers so they read
+        // as a single full-width row regardless of viewport width.
+        gridColumn: expanded ? '1 / -1' : 'auto',
         cursor: 'pointer',
       }}
       onMouseEnter={(e) => {

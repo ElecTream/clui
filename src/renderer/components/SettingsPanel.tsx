@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut, ArrowsClockwise, Copy, ArrowUpRight, Keyboard } from '@phosphor-icons/react'
+import { X, Palette, FileCode, Info, SpinnerGap, FloppyDisk, Check, ArrowSquareOut, ArrowsClockwise, Copy, ArrowUpRight, Keyboard, Sliders } from '@phosphor-icons/react'
 import { useColors, useThemeStore, type ThemeMode } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
-import type { ClaudeVersionInfo } from '../../shared/types'
+import type { ClaudeVersionInfo, EffortLevel, ModelInfo } from '../../shared/types'
 import {
   BINDINGS,
   type BindingGroup,
@@ -25,7 +25,7 @@ import {
  * trigger button yet to keep the pill chrome uncluttered.
  */
 
-type Section = 'appearance' | 'claude' | 'shortcuts' | 'about'
+type Section = 'appearance' | 'defaults' | 'claude' | 'shortcuts' | 'about'
 
 export function SettingsPanel() {
   const open = useSessionStore((s) => s.settingsPanelOpen)
@@ -106,6 +106,13 @@ export function SettingsPanel() {
             label="Appearance"
           />
           <SidebarItem
+            active={section === 'defaults'}
+            onClick={() => setSection('defaults')}
+            colors={colors}
+            icon={<Sliders size={13} />}
+            label="Defaults"
+          />
+          <SidebarItem
             active={section === 'claude'}
             onClick={() => setSection('claude')}
             colors={colors}
@@ -138,6 +145,7 @@ export function SettingsPanel() {
           }}
         >
           {section === 'appearance' && <AppearanceSection />}
+          {section === 'defaults' && <DefaultsSection />}
           {section === 'claude' && <ClaudeConfigSection />}
           {section === 'shortcuts' && <ShortcutsSection />}
           {section === 'about' && <AboutSection />}
@@ -255,6 +263,153 @@ function AppearanceSection() {
         onChange={setExpandedUI}
       />
     </div>
+  )
+}
+
+// ─── Defaults (model + effort) ───
+
+const EFFORT_OPTIONS: ReadonlyArray<{ id: EffortLevel; label: string; hint: string }> = [
+  { id: 'low', label: 'Low', hint: 'Quick replies, minimal extended thinking' },
+  { id: 'medium', label: 'Medium', hint: 'Balanced — default' },
+  { id: 'high', label: 'High', hint: 'Deeper extended thinking budget' },
+  { id: 'xhigh', label: 'xHigh', hint: 'Aggressive thinking + edge-case verification' },
+  { id: 'max', label: 'Max', hint: 'Reason exhaustively. Uncapped budget' },
+]
+
+function DefaultsSection() {
+  const colors = useColors()
+  const availableModels = useSessionStore((s) => s.availableModels)
+  const preferredModel = useSessionStore((s) => s.preferredModel)
+  const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+  const preferredEffort = useSessionStore((s) => s.preferredEffort)
+  const setPreferredEffort = useSessionStore((s) => s.setPreferredEffort)
+
+  const cliDefault = availableModels.find((m) => m.isDefault) ?? null
+  const groupedModels = useGroupedModels(availableModels)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHeading colors={colors}>Default model</SectionHeading>
+      <div style={{ color: colors.textTertiary, fontSize: 11, lineHeight: 1.5, marginTop: -12 }}>
+        New chats and pill input start with this model. Per-tab pickers still override.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <ModelOption
+          colors={colors}
+          label="Use Claude CLI default"
+          description={cliDefault ? `Currently: ${cliDefault.label}` : 'Whichever model the CLI picks'}
+          active={preferredModel === null}
+          onClick={() => setPreferredModel(null)}
+        />
+        {groupedModels.map(({ family, models }) => (
+          <React.Fragment key={family}>
+            <div
+              style={{
+                color: colors.textTertiary,
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                marginTop: 6,
+                marginBottom: 2,
+              }}
+            >
+              {family}
+            </div>
+            {models.map((m) => (
+              <ModelOption
+                key={m.id}
+                colors={colors}
+                label={m.label}
+                description={m.kind === 'alias' ? 'Auto-tracks the latest release' : `Pinned to ${m.id}`}
+                active={preferredModel === m.id}
+                onClick={() => setPreferredModel(m.id)}
+              />
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <SectionHeading colors={colors}>Default effort</SectionHeading>
+      <div style={{ color: colors.textTertiary, fontSize: 11, lineHeight: 1.5, marginTop: -12 }}>
+        How aggressive Claude should be with extended thinking. xHigh and Max sit above High and Max for cases that need deep reasoning.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {EFFORT_OPTIONS.map((opt) => (
+          <ModelOption
+            key={opt.id}
+            colors={colors}
+            label={opt.label}
+            description={opt.hint}
+            active={preferredEffort === opt.id}
+            onClick={() => setPreferredEffort(opt.id)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function useGroupedModels(models: ModelInfo[]): Array<{ family: string; models: ModelInfo[] }> {
+  const families = ['opus', 'sonnet', 'haiku']
+  return families
+    .map((family) => ({
+      family,
+      models: models.filter((m) => m.family === family),
+    }))
+    .filter((g) => g.models.length > 0)
+}
+
+function ModelOption({
+  colors,
+  label,
+  description,
+  active,
+  onClick,
+}: {
+  colors: ReturnType<typeof useColors>
+  label: string
+  description: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      data-clui-no-drag="true"
+      onClick={onClick}
+      style={{
+        background: active ? colors.surfaceActive : 'transparent',
+        border: `1px solid ${active ? colors.accent : colors.containerBorder}`,
+        borderRadius: 'var(--clui-radius-sm, 6px)',
+        padding: '8px 12px',
+        cursor: 'pointer',
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        transition: 'border-color var(--clui-state-duration, 120ms), background var(--clui-state-duration, 120ms)',
+      }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 500 }}>{label}</div>
+        <div
+          style={{
+            color: colors.textTertiary,
+            fontSize: 10,
+            marginTop: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {description}
+        </div>
+      </div>
+      {active && <Check size={12} style={{ color: colors.accent, flexShrink: 0 }} />}
+    </button>
   )
 }
 

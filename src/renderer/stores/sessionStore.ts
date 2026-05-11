@@ -13,9 +13,10 @@ import notificationSrc from '../../../resources/notification.mp3'
 // store slice.
 
 export const FALLBACK_MODELS: ModelInfo[] = [
-  { id: 'sonnet', label: 'Sonnet (latest)', family: 'sonnet', kind: 'alias', isDefault: true },
-  { id: 'opus', label: 'Opus (latest)', family: 'opus', kind: 'alias' },
+  { id: 'opus', label: 'Opus (latest)', family: 'opus', kind: 'alias', isDefault: true },
+  { id: 'sonnet', label: 'Sonnet (latest)', family: 'sonnet', kind: 'alias' },
   { id: 'haiku', label: 'Haiku (latest)', family: 'haiku', kind: 'alias' },
+  { id: 'claude-opus-4-7', label: 'Opus 4.7', family: 'opus', kind: 'pinned' },
   { id: 'claude-opus-4-6', label: 'Opus 4.6', family: 'opus', kind: 'pinned' },
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', family: 'sonnet', kind: 'pinned' },
   { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', family: 'haiku', kind: 'pinned' },
@@ -50,7 +51,7 @@ const EFFORT_KEY = 'clui:preferred-effort'
 function loadEffort(): EffortLevel {
   try {
     const v = localStorage.getItem(EFFORT_KEY)
-    if (v === 'low' || v === 'medium' || v === 'high' || v === 'max') return v
+    if (v === 'low' || v === 'medium' || v === 'high' || v === 'xhigh' || v === 'max') return v
   } catch {}
   return 'medium'
 }
@@ -180,7 +181,7 @@ interface State {
   setSearchIndexStatus: (status: SearchIndexStatus) => void
   resumeSession: (sessionId: string, title?: string, projectPath?: string) => Promise<string>
   addSystemMessage: (content: string) => void
-  sendMessage: (prompt: string, projectPath?: string) => void
+  sendMessage: (prompt: string, projectPath?: string, tabId?: string) => void
   respondPermission: (tabId: string, questionId: string, optionId: string) => void
   addDirectory: (dir: string) => void
   removeDirectory: (dir: string) => void
@@ -1165,13 +1166,17 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
 
   // ─── Send ───
 
-  sendMessage: (prompt, projectPath) => {
+  sendMessage: (prompt, projectPath, tabId) => {
     void (async () => {
       let errorTabId: string | null = null
 
       try {
         const initialState = get()
-        const initialTab = initialState.tabs.find((t) => t.id === initialState.activeTabId)
+        // Prefer the explicit tabId argument when provided (Phase 2 — a
+        // workspace tile sends to its own tab regardless of global active).
+        // Fall back to activeTabId for the existing pill/popout callsites.
+        const targetTabId = tabId ?? initialState.activeTabId
+        const initialTab = initialState.tabs.find((t) => t.id === targetTabId)
         if (!initialTab) return
 
         errorTabId = initialTab.id
@@ -1179,11 +1184,11 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
         // Guard: don't send while connecting (warmup in progress)
         if (initialTab.status === 'connecting') return
 
-        const tabId = await ensureBackendTabRegistered(initialTab.id)
-        errorTabId = tabId
+        const registeredTabId = await ensureBackendTabRegistered(initialTab.id)
+        errorTabId = registeredTabId
 
         const { tabs, staticInfo, preferredModel } = get()
-        const tab = tabs.find((t) => t.id === tabId)
+        const tab = tabs.find((t) => t.id === registeredTabId)
         if (!tab) return
 
         // Use explicitly chosen directory, otherwise fall back to user home
@@ -1208,7 +1213,7 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
         // If busy, add to queuedPrompts (shown at bottom); otherwise add to messages and set connecting
         set((s) => ({
           tabs: s.tabs.map((t) => {
-            if (t.id !== tabId) return t
+            if (t.id !== registeredTabId) return t
             const withEffectiveBase = t.hasChosenDirectory
               ? t
               : {
@@ -1252,7 +1257,7 @@ export const useSessionStore = create<State>()(persist((set, get) => ({
 
         // Send to backend — ControlPlane will queue if a run is active
         const { permissionMode, preferredEffort } = get()
-        await window.clui.prompt(tabId, requestId, {
+        await window.clui.prompt(registeredTabId, requestId, {
           prompt: fullPrompt,
           projectPath: resolvedPath,
           sessionId: tab.claudeSessionId || undefined,

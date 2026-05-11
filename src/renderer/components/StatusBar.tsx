@@ -317,6 +317,7 @@ const EFFORT_LABELS: Record<import('../../shared/types').EffortLevel, string> = 
   low: 'Low',
   medium: 'Medium',
   high: 'High',
+  xhigh: 'xHigh',
   max: 'Max',
 }
 
@@ -366,7 +367,7 @@ export function EffortPicker() {
         style={{ color: colors.textTertiary, cursor: 'pointer' }}
         title="Effort / thinking-budget hint"
       >
-        <Lightning size={11} weight={preferredEffort === 'max' || preferredEffort === 'high' ? 'fill' : 'regular'} />
+        <Lightning size={11} weight={preferredEffort === 'max' || preferredEffort === 'xhigh' || preferredEffort === 'high' ? 'fill' : 'regular'} />
         {EFFORT_LABELS[preferredEffort]}
         <CaretDown size={10} style={{ opacity: 0.6, flexShrink: 0 }} />
       </button>
@@ -394,13 +395,13 @@ export function EffortPicker() {
           }}
         >
           <div className="py-1">
-            {(['low', 'medium', 'high', 'max'] as const).map((level) => (
+            {(['low', 'medium', 'high', 'xhigh', 'max'] as const).map((level) => (
               <ModeRow
                 key={level}
                 active={preferredEffort === level}
                 onClick={() => { setPreferredEffort(level); setOpen(false) }}
                 colors={colors}
-                icon={<Lightning size={12} weight={level === 'max' || level === 'high' ? 'fill' : 'regular'} />}
+                icon={<Lightning size={12} weight={level === 'max' || level === 'xhigh' || level === 'high' ? 'fill' : 'regular'} />}
                 label={EFFORT_LABELS[level]}
               />
             ))}

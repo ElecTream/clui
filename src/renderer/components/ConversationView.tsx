@@ -86,7 +86,15 @@ function groupMessages(messages: Message[]): GroupedItem[] {
 
 // ─── Main Component ───
 
-export function ConversationView() {
+interface ConversationViewProps {
+  /** Optional tab to render. When omitted, falls back to the store's
+   *  active tab — preserves existing single-active-tab callsites
+   *  (pill, popout). When provided, this view is pinned to that tab,
+   *  enabling Phase 2 multi-tile workspaces in the hub. */
+  tabId?: string
+}
+
+export function ConversationView({ tabId }: ConversationViewProps = {}) {
   const tabs = useSessionStore((s) => s.tabs)
   const activeTabId = useSessionStore((s) => s.activeTabId)
   const sendMessage = useSessionStore((s) => s.sendMessage)
@@ -96,20 +104,21 @@ export function ConversationView() {
   const [hovered, setHovered] = useState(false)
   const [renderOffset, setRenderOffset] = useState(0) // 0 = show from tail
   const isNearBottomRef = useRef(true)
-  const prevTabIdRef = useRef(activeTabId)
+  const effectiveTabId = tabId ?? activeTabId
+  const prevTabIdRef = useRef(effectiveTabId)
   const colors = useColors()
   const expandedUI = useThemeStore((s) => s.expandedUI)
 
-  const tab = tabs.find((t) => t.id === activeTabId)
+  const tab = tabs.find((t) => t.id === effectiveTabId)
 
   // Reset render offset and scroll state when switching tabs
   useEffect(() => {
-    if (activeTabId !== prevTabIdRef.current) {
-      prevTabIdRef.current = activeTabId
+    if (effectiveTabId !== prevTabIdRef.current) {
+      prevTabIdRef.current = effectiveTabId
       setRenderOffset(0)
       isNearBottomRef.current = true
     }
-  }, [activeTabId])
+  }, [effectiveTabId])
 
   // Track whether user is scrolled near the bottom
   const handleScroll = useCallback(() => {
@@ -176,7 +185,7 @@ export function ConversationView() {
   const handleRetry = () => {
     const lastUserMsg = [...tab.messages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
-      sendMessage(lastUserMsg.content)
+      sendMessage(lastUserMsg.content, undefined, effectiveTabId)
     }
   }
 

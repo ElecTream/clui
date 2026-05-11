@@ -499,8 +499,9 @@ export type PermissionModeKind = 'ask' | 'auto' | 'plan'
  *   low    → quick replies, minimal extended thinking
  *   medium → balanced (default)
  *   high   → deeper extended thinking budget
+ *   xhigh  → aggressive extended thinking, edge-case verification
  *   max    → uncapped thinking budget */
-export type EffortLevel = 'low' | 'medium' | 'high' | 'max'
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 // ─── IPC Channel Names ───
 
@@ -777,6 +778,7 @@ export type PillAction =
   | { kind: 'rename-tab'; tabId: string; title: string }
   | { kind: 'duplicate-tab'; tabId: string }
   | { kind: 'reorder-tabs'; fromIdx: number; toIdx: number }
+  | { kind: 'select-tab'; tabId: string }
 
 export interface PillActionResult {
   ok: boolean
